@@ -613,11 +613,20 @@ fetch_and_unpack() {
   tmp="$(mktemp -d)"
   archive="$tmp/$(asset_name)"
   url="$(download_base_url)/$(asset_name)"
-  log "downloading $url"
-  if ! download_file "$url" "$archive"; then
-    warn "download failed: $url"
-    rm -rf "$tmp"
-    return 1
+  if [[ -f "./$(asset_name)" ]]; then
+    log "using local $(asset_name)"
+    cp "./$(asset_name)" "$archive"
+  elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/$(asset_name)" ]]; then
+    log "using local $(asset_name)"
+    cp "$(dirname "${BASH_SOURCE[0]}")/$(asset_name)" "$archive"
+  else
+    log "downloading $url"
+    if ! download_file "$url" "$archive"; then
+      warn "download failed: $url"
+      warn "提示: 若仓库为 Private 私有仓库，请在 GitHub 设为 Public 公开，或将 $(asset_name) 预先下载放置在当前目录下。"
+      rm -rf "$tmp"
+      return 1
+    fi
   fi
 
   if ! tar -xzf "$archive" -C "$tmp"; then
