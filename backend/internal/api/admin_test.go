@@ -681,7 +681,7 @@ func TestHandleCheckUpdateReportsNewRelease(t *testing.T) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tag_name": "v0.2.0",
-			"html_url": "https://github.com/nianzhibai/91/releases/tag/v0.2.0",
+			"html_url": "https://github.com/z08w12/omni-media-vault/releases/tag/v0.2.0",
 			"body":     "## Changes\n\n- Added update notes dialog",
 		})
 	}))
@@ -727,7 +727,7 @@ func TestHandleCheckUpdateReportsUpToDate(t *testing.T) {
 	releaseServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tag_name": "v0.2.0",
-			"html_url": "https://github.com/nianzhibai/91/releases/tag/v0.2.0",
+			"html_url": "https://github.com/z08w12/omni-media-vault/releases/tag/v0.2.0",
 		})
 	}))
 	t.Cleanup(releaseServer.Close)
@@ -755,7 +755,7 @@ func TestHandleCheckUpdateUsesDockerImageVersion(t *testing.T) {
 	releaseServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tag_name": "v0.2.0",
-			"html_url": "https://github.com/nianzhibai/91/releases/tag/v0.2.0",
+			"html_url": "https://github.com/z08w12/omni-media-vault/releases/tag/v0.2.0",
 		})
 	}))
 	t.Cleanup(releaseServer.Close)

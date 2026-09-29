@@ -125,7 +125,7 @@ test("the share page uses the shared footer with a project repository link", () 
   assert.match(sharePageSource, /<Footer \/>/);
   assert.match(
     footerSource,
-    /href="https:\/\/github\.com\/nianzhibai\/91"[\s\S]*?>\s*© \{new Date\(\)\.getFullYear\(\)\} 91\s*<\/a>/
+    /href="https:\/\/github\.com\/z08w12\/omni-media-vault"[\s\S]*?>\s*© \{new Date\(\)\.getFullYear\(\)\} 91\s*<\/a>/
   );
   assert.doesNotMatch(shareStylesSource, /\.share-page__footer/);
 });

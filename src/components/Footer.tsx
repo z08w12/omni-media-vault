@@ -4,7 +4,7 @@ export function Footer() {
       <div className="container footer__inner">
         <a
           className="footer__copy"
-          href="https://github.com/nianzhibai/91"
+          href="https://github.com/z08w12/omni-media-vault"
           target="_blank"
           rel="noopener noreferrer"
         >
