@@ -77,8 +77,8 @@ export default function SharedVideoPage() {
     <div className="share-page">
       <header className="share-page__header">
         <div className="container share-page__header-inner">
-          <div className="share-page__brand" aria-label="91">
-            <img src="/icon.png" alt="" />
+          <div className="share-page__brand" aria-label="Omni-Media-Vault">
+            <img src="/icon.png" alt="Omni-Media-Vault" />
           </div>
         </div>
       </header>

@@ -112,9 +112,9 @@ export function MainNav() {
   return (
     <nav className={`main-nav ${open ? "is-open" : ""}`}>
       <div className="container main-nav__inner">
-        <NavLink to="/" className="main-nav__logo">
+        <NavLink to="/" className="main-nav__logo" aria-label="Omni-Media-Vault">
           <span className="main-nav__logo-mark">
-            <img src="/icon.png" alt="" className="main-nav__logo-img" />
+            <img src="/icon.png" alt="Omni-Media-Vault" className="main-nav__logo-img" />
           </span>
         </NavLink>
 
