@@ -1,0 +1,54 @@
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import type { PreviewState } from "@/types";
+
+type Props = {
+  src: string;
+  state: PreviewState;
+  onCanPlay: () => void;
+  onError: () => void;
+  onTimeUpdate?: (progress: number) => void; // 0~1
+};
+
+// The card owns activation; the media element owns releasing its source on unmount.
+export const PreviewVideo = forwardRef<HTMLVideoElement, Props>(
+  function PreviewVideo(
+    { src, state, onCanPlay, onError, onTimeUpdate },
+    ref
+  ) {
+    const mediaRef = useRef<HTMLVideoElement>(null);
+    useImperativeHandle(ref, () => mediaRef.current!, []);
+    useEffect(() => {
+      const media = mediaRef.current;
+      // React StrictMode may run cleanup and setup again on the same element.
+      if (media && media.getAttribute("src") !== src) media.src = src;
+      return () => {
+        if (!media) return;
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+      };
+    }, [src]);
+    return (
+      <video
+        ref={mediaRef}
+        className={`preview-video ${state === "playing" ? "is-visible" : ""}`}
+        src={src}
+        muted
+        autoPlay
+        loop
+        playsInline
+        preload="metadata"
+        onCanPlay={onCanPlay}
+        onError={onError}
+        onTimeUpdate={(e) => {
+          if (!onTimeUpdate) return;
+          const el = e.currentTarget;
+          if (el.duration > 0) {
+            onTimeUpdate(el.currentTime / el.duration);
+          }
+        }}
+        aria-hidden="true"
+      />
+    );
+  }
+);
