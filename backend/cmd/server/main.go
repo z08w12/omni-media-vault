@@ -33,6 +33,7 @@ import (
 	"github.com/video-site/backend/internal/proxy"
 	"github.com/video-site/backend/internal/subtitles"
 	"github.com/video-site/backend/internal/telegram"
+	"github.com/video-site/backend/internal/transcode"
 )
 
 const (
@@ -311,6 +312,17 @@ func main() {
 	}
 	app.onTagsChanged = apiServer.InvalidateTagCache
 
+	transcodeService := transcode.New(transcode.Config{
+		Catalog:   cat,
+		UploadDir: app.localUploadDir(),
+		TempDir:   filepath.Join(cfg.Storage.DataDir, "tmp"),
+		GetDrive:  app.registry.Get,
+		OnRegenPreview: func(videoID string) {
+			go app.regenPreview(ctx, videoID)
+		},
+	})
+	defer transcodeService.Close()
+
 	adminServer := &api.AdminServer{
 		Telegram:               telegramService,
 		Imports:                remoteUploader,
@@ -377,6 +389,11 @@ func main() {
 		OnDeleteVideo: func(reqCtx context.Context, videoID string, deleteSource bool) (api.DeleteVideoResult, error) {
 			return app.deleteVideo(reqCtx, videoID, deleteSource)
 		},
+		OnTranscodeVideo: func(reqCtx context.Context, videoID string) (*transcode.Task, error) {
+			return transcodeService.Enqueue(reqCtx, videoID)
+		},
+		GetTranscodeStatus: transcodeService.GetStatus,
+		GetTranscodeQueue:  transcodeService.GetQueueStatus,
 		OnStartBlacklistSourceDelete: func(req api.BlacklistSourceDeleteRequest) bool {
 			return app.startBlacklistSourceDelete(ctx, req)
 		},

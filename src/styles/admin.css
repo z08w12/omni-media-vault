@@ -2392,6 +2392,11 @@ body.admin-mobile-nav-open {
   gap: var(--space-2);
 }
 
+.admin-modal--video-edit .admin-video-transcode-actions {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 @media (max-width: 640px) {
   .admin-modal--video-edit .admin-modal__body {
     padding: var(--space-4);
@@ -8728,7 +8733,17 @@ body.admin-mobile-nav-open {
   gap: var(--space-5);
 }
 
+.admin-video-transcode-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
 .admin-modal--video-edit .admin-video-preview-actions .admin-status {
+  gap: 0;
+}
+
+.admin-modal--video-edit .admin-video-transcode-actions .admin-status {
   gap: 0;
 }
 
@@ -8737,7 +8752,18 @@ body.admin-mobile-nav-open {
   display: none;
 }
 
+.admin-modal--video-edit .admin-video-transcode-actions .admin-status::before {
+  content: none;
+  display: none;
+}
+
 .admin-video-preview-button {
+  min-height: 0;
+  padding: 5px 9px;
+  font-size: var(--font-xs);
+}
+
+.admin-video-transcode-button {
   min-height: 0;
   padding: 5px 9px;
   font-size: var(--font-xs);

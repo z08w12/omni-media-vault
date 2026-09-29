@@ -250,3 +250,44 @@ func (a *AdminServer) handleRegenFailedFingerprints(w http.ResponseWriter, r *ht
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 }
+
+func (a *AdminServer) handleTranscodeVideo(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if a.OnTranscodeVideo == nil {
+		writeErr(w, r, http.StatusNotImplemented, errors.New("transcode service not available"))
+		return
+	}
+	task, err := a.OnTranscodeVideo(r.Context(), id)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"ok":     true,
+		"status": task.Status,
+		"task":   task,
+	})
+}
+
+func (a *AdminServer) handleGetTranscodeStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if a.GetTranscodeStatus == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"videoId": id, "status": "idle"})
+		return
+	}
+	task := a.GetTranscodeStatus(id)
+	if task == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"videoId": id, "status": "idle"})
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (a *AdminServer) handleGetTranscodeQueue(w http.ResponseWriter, r *http.Request) {
+	if a.GetTranscodeQueue == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"pending": []any{}})
+		return
+	}
+	status := a.GetTranscodeQueue()
+	writeJSON(w, http.StatusOK, status)
+}

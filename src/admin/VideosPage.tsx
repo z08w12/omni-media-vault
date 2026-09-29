@@ -12,6 +12,7 @@ import {
   Ban,
   Check,
   Edit,
+  Film,
   RefreshCw,
   Image,
   SlidersHorizontal,
@@ -413,6 +414,10 @@ function CurrentVideosTab({
   const [deleting, setDeleting] = useState(false);
   const [deleteSource, setDeleteSource] = useState(false);
   const [regenPreviewById, setRegenPreviewById] = useState<Record<string, RegenPreviewState>>({});
+  const [transcodeTarget, setTranscodeTarget] = useState<api.AdminVideo | null>(null);
+  const [transcodingAction, setTranscodingAction] = useState(false);
+  const [transcodingIds, setTranscodingIds] = useState<Set<string>>(new Set());
+  const previousTranscodingIdsRef = useRef<Set<string>>(new Set());
   const [displayedPage, setDisplayedPage] = useState<number | null>(null);
   const [resolvedListQueryKey, setResolvedListQueryKey] = useState("");
   const listRequestIdRef = useRef(0);
@@ -561,6 +566,51 @@ function CurrentVideosTab({
     });
   }, [list, trackedRegenCount]);
 
+  useEffect(() => {
+    if (!routeActive) return;
+    let cancelled = false;
+    async function checkTranscodeQueue() {
+      try {
+        const queue = await api.getTranscodeQueue();
+        if (cancelled) return;
+        const activeSet = new Set<string>();
+        if (queue.active && (queue.active.status === "pending" || queue.active.status === "processing")) {
+          activeSet.add(queue.active.videoId);
+        }
+        for (const p of queue.pending) {
+          if (p.videoId) activeSet.add(p.videoId);
+        }
+
+        const prev = previousTranscodingIdsRef.current;
+        for (const id of prev) {
+          if (!activeSet.has(id)) {
+            const finished = queue.recent?.find((r) => r.videoId === id);
+            if (finished) {
+              if (finished.status === "completed") {
+                show(`视频「${finished.videoTitle || id}」转码成功！已替换为标准 MP4 并清理原文件。`, "success");
+              } else if (finished.status === "failed") {
+                show(`视频「${finished.videoTitle || id}」转码失败：${finished.error || "未知原因"}`, "error");
+              }
+            }
+            refreshListOnly();
+          }
+        }
+        previousTranscodingIdsRef.current = activeSet;
+        setTranscodingIds(activeSet);
+      } catch {
+        // queue polling errors are silent
+      }
+    }
+
+    checkTranscodeQueue();
+    const pollInterval = transcodingIds.size > 0 ? 3000 : 10000;
+    const timer = window.setInterval(checkTranscodeQueue, pollInterval);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [routeActive, transcodingIds.size, show]);
+
   const driveNameMap = new Map(drives.map((d) => [d.id, d.name || d.id]));
   driveNameMap.set(LOCAL_UPLOAD_SOURCE_ID, "本地存储");
 
@@ -617,6 +667,31 @@ function CurrentVideosTab({
 
   function isPreviewGenerating(v: api.AdminVideo) {
     return !!regenPreviewById[v.id] || v.previewStatus === REGEN_PREVIEW_STATUS;
+  }
+
+  function isTranscoding(v: api.AdminVideo) {
+    return transcodingIds.has(v.id);
+  }
+
+  async function handleConfirmTranscode() {
+    if (!transcodeTarget) return;
+    const target = transcodeTarget;
+    setTranscodingAction(true);
+    try {
+      await api.transcodeVideo(target.id);
+      setTranscodingIds((prev) => {
+        const next = new Set(prev);
+        next.add(target.id);
+        previousTranscodingIdsRef.current = next;
+        return next;
+      });
+      setTranscodeTarget(null);
+      show("已加入转码队列，将按单任务队列依次执行", "success");
+    } catch (e) {
+      show(e instanceof Error ? e.message : "提交转码失败", "error");
+    } finally {
+      setTranscodingAction(false);
+    }
   }
 
   async function confirmDeleteVideo() {
@@ -850,8 +925,10 @@ function CurrentVideosTab({
                 video={v}
                 driveName={driveNameMap.get(v.driveId) ?? v.driveId}
                 selected={selectedIds.has(v.id)}
+                transcoding={isTranscoding(v)}
                 onToggleSelect={() => toggleSelect(v.id)}
                 onEdit={() => setEditing(v)}
+                onTranscode={() => setTranscodeTarget(v)}
                 onDelete={() => {
                   setDeleteSource(false);
                   setDeleteTarget(v);
@@ -878,11 +955,27 @@ function CurrentVideosTab({
           availableTags={availableTags}
           previewGenerating={isPreviewGenerating(editingVideo)}
           onRegenPreview={() => handleRegen(editingVideo)}
+          transcoding={isTranscoding(editingVideo)}
+          onTranscode={() => setTranscodeTarget(editingVideo)}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
             refresh();
           }}
+        />
+      )}
+      {transcodeTarget && (
+        <ConfirmModal
+          open
+          title="转码为标准 MP4"
+          message={`确认将视频「${transcodeTarget.title}」加入转码队列？\n\n转码将转换为浏览器广泛兼容的 MP4 (H.264+AAC) 格式。转码成功后将自动替换并删除不可播放的原文件。队列为单并发（同一时间只处理一个视频）。`}
+          confirmText={transcodingAction ? "提交中..." : "开始转码"}
+          danger={false}
+          loading={transcodingAction}
+          onCancel={() => {
+            if (!transcodingAction) setTranscodeTarget(null);
+          }}
+          onConfirm={handleConfirmTranscode}
         />
       )}
       <ConfirmModal
@@ -1640,15 +1733,19 @@ function CurrentVideoCard({
   video,
   driveName,
   selected,
+  transcoding = false,
   onToggleSelect,
   onEdit,
+  onTranscode,
   onDelete,
 }: {
   video: api.AdminVideo;
   driveName: string;
   selected: boolean;
+  transcoding?: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
+  onTranscode: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -1680,6 +1777,20 @@ function CurrentVideoCard({
             aria-label="编辑视频"
           >
             <Edit size={15} />
+          </button>
+          <button
+            type="button"
+            className={`admin-btn admin-video-action-icon-button${transcoding ? " is-busy" : ""}`}
+            onClick={onTranscode}
+            disabled={transcoding}
+            title={transcoding ? "转码处理中（队列单任务进行）..." : "转码为标准 MP4（H.264+AAC）"}
+            aria-label="转码为标准 MP4"
+          >
+            {transcoding ? (
+              <RefreshCw size={15} className="admin-spin" />
+            ) : (
+              <Film size={15} />
+            )}
           </button>
           <VideoDeleteIconButton
             onClick={onDelete}
@@ -1805,6 +1916,8 @@ function EditVideoModal({
   availableTags,
   previewGenerating,
   onRegenPreview,
+  transcoding = false,
+  onTranscode,
   onClose,
   onSaved,
 }: {
@@ -1812,6 +1925,8 @@ function EditVideoModal({
   availableTags: api.AdminTag[];
   previewGenerating: boolean;
   onRegenPreview: () => Promise<void>;
+  transcoding?: boolean;
+  onTranscode?: () => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1928,6 +2043,22 @@ function EditVideoModal({
                   disabled={saving || previewBusy}
                 >
                   {previewBusy ? "生成中..." : "重新生成预览"}
+                </button>
+              </dd>
+            </div>
+            <div className="admin-video-edit-meta__item is-transcode">
+              <dt>视频转码</dt>
+              <dd className="admin-video-transcode-actions">
+                <span className={`admin-status ${transcoding ? "is-generating" : video.ext.toLowerCase() === ".mp4" ? "is-ok" : "is-pending"}`}>
+                  {transcoding ? "转码中 / 排队中" : video.ext.toLowerCase() === ".mp4" ? "MP4 (标准)" : `${video.ext || "非标准格式"}`}
+                </span>
+                <button
+                  type="button"
+                  className="admin-btn admin-video-transcode-button"
+                  onClick={onTranscode}
+                  disabled={saving || transcoding}
+                >
+                  {transcoding ? "转码处理中..." : "转码为 MP4"}
                 </button>
               </dd>
             </div>

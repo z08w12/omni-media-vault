@@ -33,6 +33,14 @@ func (c *Catalog) DeleteTelegramLocalFile(ctx context.Context, fileID string) er
 	return err
 }
 
+func (c *Catalog) ReplaceTelegramLocalFile(ctx context.Context, oldFileID, newFileID string) error {
+	if oldFileID == newFileID {
+		return nil
+	}
+	_, err := c.db.ExecContext(ctx, `UPDATE telegram_local_files SET file_id=? WHERE file_id=?`, newFileID, oldFileID)
+	return err
+}
+
 func (c *Catalog) AbandonedTelegramLocalFiles(ctx context.Context) ([]TelegramLocalFile, error) {
 	rows, err := c.db.QueryContext(ctx, `SELECT f.file_id,f.job_id FROM telegram_local_files f
  LEFT JOIN remote_upload_jobs j ON j.id=f.job_id

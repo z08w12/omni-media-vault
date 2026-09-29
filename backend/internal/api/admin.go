@@ -17,6 +17,7 @@ import (
 	"github.com/video-site/backend/internal/mediaimport"
 	"github.com/video-site/backend/internal/scanjob"
 	"github.com/video-site/backend/internal/telegram"
+	"github.com/video-site/backend/internal/transcode"
 )
 
 type DriveConfigUpdateScope uint8
@@ -94,6 +95,9 @@ type AdminServer struct {
 	OnRegenFailedThumbnails        func(driveID string)
 	OnRegenFailedFingerprints      func(driveID string)
 	OnDeleteVideo                  func(ctx context.Context, videoID string, deleteSource bool) (DeleteVideoResult, error)
+	OnTranscodeVideo               func(ctx context.Context, videoID string) (*transcode.Task, error)
+	GetTranscodeStatus             func(videoID string) *transcode.Task
+	GetTranscodeQueue              func() transcode.QueueStatus
 	OnStartBlacklistSourceDelete   func(BlacklistSourceDeleteRequest) bool
 	GetBlacklistSourceDeleteStatus func() BlacklistSourceDeleteStatus
 	// OnRemoveBlacklist owns the complete application-level restore operation:
@@ -280,6 +284,9 @@ func (a *AdminServer) Register(r chi.Router) {
 			r.Delete("/videos/{id}", a.handleDeleteVideo)
 			r.Post("/videos/regen-preview", a.handleRegenAllPreviews)
 			r.Post("/videos/{id}/regen-preview", a.handleRegenPreview)
+			r.Post("/videos/{id}/transcode", a.handleTranscodeVideo)
+			r.Get("/videos/{id}/transcode", a.handleGetTranscodeStatus)
+			r.Get("/videos/transcode/queue", a.handleGetTranscodeQueue)
 			// 黑名单（被拉黑/手动删除、扫盘不再入库的视频）
 			r.Get("/blacklist", a.handleListBlacklist)
 			r.Get("/blacklist/source-delete/status", a.handleBlacklistSourceDeleteStatus)

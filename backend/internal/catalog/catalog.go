@@ -557,6 +557,33 @@ UPDATE videos
 	return nil
 }
 
+// UpdateVideoAfterTranscode updates video file identity, size, duration and resets
+// derivative generation states following a successful transcode to MP4.
+func (c *Catalog) UpdateVideoAfterTranscode(ctx context.Context, videoID, fileID, fileName, ext string, size int64, durationSec int) error {
+	res, err := c.db.ExecContext(ctx, `
+UPDATE videos
+   SET file_id = ?,
+       file_name = ?,
+       ext = ?,
+       size_bytes = ?,
+       duration_seconds = ?,
+       content_hash = '',
+       sampled_sha256 = '',
+       fingerprint_status = 'pending',
+       fingerprint_error = '',
+       thumbnail_status = 'pending',
+       preview_status = 'pending',
+       updated_at = ?
+ WHERE id = ?`, fileID, fileName, ext, size, durationSec, time.Now().UnixMilli(), videoID)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ListVideosByDriveID 列出指定 drive 下所有未隐藏的视频，按 published_at 倒序。
 // crawler upload worker uses this to find local crawler rows before uploading
 // them to their configured target drive.

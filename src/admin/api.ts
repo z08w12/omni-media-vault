@@ -1197,6 +1197,39 @@ export function regenPreview(id: string) {
   );
 }
 
+export type TranscodeTask = {
+  videoId: string;
+  videoTitle: string;
+  status: "idle" | "pending" | "processing" | "completed" | "failed";
+  error?: string;
+  createdAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+export type TranscodeQueueStatus = {
+  active?: TranscodeTask | null;
+  pending: TranscodeTask[];
+  recent: TranscodeTask[];
+};
+
+export function transcodeVideo(id: string) {
+  return request<{ ok: boolean; status: string; task: TranscodeTask }>(
+    `/videos/${encodeURIComponent(id)}/transcode`,
+    { method: "POST" }
+  );
+}
+
+export function getVideoTranscodeStatus(id: string) {
+  return request<TranscodeTask>(
+    `/videos/${encodeURIComponent(id)}/transcode`
+  );
+}
+
+export function getTranscodeQueue() {
+  return request<TranscodeQueueStatus>("/videos/transcode/queue");
+}
+
 // ---------- Tags ----------
 
 export type AdminTag = {
