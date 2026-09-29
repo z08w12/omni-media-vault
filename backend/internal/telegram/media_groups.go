@@ -84,7 +84,7 @@ func (s *Service) flushMediaGroups(ctx context.Context, before time.Time) error 
 func (s *Service) prepareMediaGroup(ctx context.Context, group catalog.TelegramMediaGroup) ([]catalog.TelegramImport, error) {
 	updates := make([]update, len(group.Updates))
 	caption := ""
-	videoCount := 0
+	mediaCount := 0
 	for i, entry := range group.Updates {
 		u := &updates[i]
 		if err := json.Unmarshal([]byte(entry.Payload), u); err != nil {
