@@ -37,7 +37,7 @@ jobs:
           cache: npm
 
       - name: Build release packages
-        run: scripts/build-release.sh
+        run: bash scripts/build-release.sh
 
       - name: Upload release assets
         env:
