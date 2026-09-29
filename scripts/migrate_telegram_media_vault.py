@@ -30,16 +30,22 @@ def main():
         help="Path to telegram-media data dir (contains media.db and media/)",
     )
     parser.add_argument(
-        "--91-data",
+        "--new-data",
+        dest="new_data",
         default="/opt/video-site-91/data",
-        help="Path to 91 data dir (contains video-site.db and library/)",
+        help="Path to 91 data dir (contains video-site.db and telegram/library/)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simulate migration without modifying destination",
     )
     args = parser.parse_args()
 
     old_db_path = Path(args.old_data) / "media.db"
     old_media_dir = Path(args.old_data) / "media"
-    new_db_path = Path(args.91_data) / "video-site.db"
-    new_library_dir = Path(args.91_data) / "library"
+    new_db_path = Path(args.new_data) / "video-site.db"
+    new_library_dir = Path(args.new_data) / "telegram" / "library"
 
     if not old_db_path.exists():
         print(f"[-] 旧数据库文件不存在：{old_db_path}", file=sys.stderr)
@@ -100,16 +106,20 @@ def main():
 
         # Check if already imported
         existing = new_conn.execute("SELECT id FROM videos WHERE id = ?", (video_id,)).fetchone()
-        if existing:
+        if existing and dest_file.exists():
             skipped_count += 1
             continue
 
         # Copy or hardlink file to 91 library
-        if not dest_file.exists():
+        if not args.dry_run and not dest_file.exists():
             try:
                 os.link(src_file, dest_file)
             except Exception:
                 shutil.copy2(src_file, dest_file)
+
+        if existing:
+            migrated_count += 1
+            continue
 
         # Build metadata
         raw_caption = item["caption"] or ""
@@ -138,6 +148,12 @@ def main():
         created_at_ms = int((item["created_at"] or time.time()) * 1000)
 
         preview_status = "disabled" if is_image else "pending"
+
+        if args.dry_run:
+            migrated_count += 1
+            if migrated_count <= 5 or migrated_count % 20 == 0:
+                print(f"[dry-run] 模拟迁移 #{old_id}: {title} ({ext}) tags={tags}")
+            continue
 
         try:
             with new_conn:
