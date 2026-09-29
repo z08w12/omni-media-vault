@@ -13,6 +13,10 @@ import {
 } from "@/lib/fullscreenSubtitleLayout";
 import { diagnosePlaybackSource } from "@/lib/playbackError";
 import {
+  markVideoPlaybackUnsupported,
+  clearVideoPlaybackUnsupported,
+} from "@/lib/videoCompatibility";
+import {
   getPlayerGesturePoint,
   setPlayerGestureVolume,
   type PlayerGestureFrame,
@@ -203,6 +207,7 @@ const tripleScreenBindings = new WeakMap<
 >();
 
 export function VideoPlayer({
+  id,
   src,
   preferTypedMp4SourceOnIOS = false,
   poster,
@@ -240,6 +245,7 @@ export function VideoPlayer({
     setPreviewHover(null);
 
     const cleanupPlayer = mountArtPlayer({
+      id,
       mount,
       src,
       preferTypedMp4SourceOnIOS,
@@ -256,7 +262,7 @@ export function VideoPlayer({
     });
 
     return cleanupPlayer;
-  }, [poster, preferTypedMp4SourceOnIOS, retryNonce, src, title]);
+  }, [id, poster, preferTypedMp4SourceOnIOS, retryNonce, src, title]);
 
   useEffect(() => {
     return () => {
@@ -385,6 +391,7 @@ function sourcePathname(src: string) {
 }
 
 function mountArtPlayer({
+  id,
   mount,
   src,
   preferTypedMp4SourceOnIOS,
@@ -399,6 +406,7 @@ function mountArtPlayer({
   onPreviewHover,
   onGestureHud,
 }: {
+  id?: string;
   mount: HTMLDivElement;
   src: string;
   preferTypedMp4SourceOnIOS: boolean;
@@ -559,10 +567,21 @@ function mountArtPlayer({
     playbackErrorActive = false;
     clearPlaybackDiagnostic();
     onError(null);
+    if (id) {
+      clearVideoPlaybackUnsupported(id);
+    }
   }
 
   function handleVideoError() {
     playbackErrorActive = true;
+    if (
+      id &&
+      video.error &&
+      (video.error.code === MediaError.MEDIA_ERR_DECODE ||
+        video.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED)
+    ) {
+      markVideoPlaybackUnsupported(id);
+    }
     const fallbackMessage = mediaErrorMessage(video.error);
     onError({
       title: "视频源加载失败",

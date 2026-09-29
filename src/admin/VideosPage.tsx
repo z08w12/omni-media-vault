@@ -44,6 +44,10 @@ import { SearchPanel } from "@/components/SearchPanel";
 import { FilterAllIcon } from "@/components/icons/FilterAllIcon";
 import { LocalStorageIcon } from "@/components/icons/LocalStorageIcon";
 import { TelegramIcon } from "@/components/icons/TelegramIcon";
+import {
+  useVideoCompatibility,
+  markVideoPlaybackUnsupported,
+} from "@/lib/videoCompatibility";
 
 const DESKTOP_CURRENT_VIDEOS_PAGE_SIZE = 16;
 const MOBILE_CURRENT_VIDEOS_PAGE_SIZE = 10;
@@ -427,6 +431,7 @@ function CurrentVideosTab({
   );
   const previousPageSizeRef = useRef(pageSize);
   const { show } = useToast();
+  const { isBrowserPlayable, clearVideoPlaybackUnsupported } = useVideoCompatibility();
   const activeListQueryKey = JSON.stringify([
     page,
     pageSize,
@@ -587,6 +592,7 @@ function CurrentVideosTab({
             const finished = queue.recent?.find((r) => r.videoId === id);
             if (finished) {
               if (finished.status === "completed") {
+                clearVideoPlaybackUnsupported(finished.videoId);
                 show(`视频「${finished.videoTitle || id}」转码成功！已替换为标准 MP4 并清理原文件。`, "success");
               } else if (finished.status === "failed") {
                 show(`视频「${finished.videoTitle || id}」转码失败：${finished.error || "未知原因"}`, "error");
@@ -926,6 +932,7 @@ function CurrentVideosTab({
                 driveName={driveNameMap.get(v.driveId) ?? v.driveId}
                 selected={selectedIds.has(v.id)}
                 transcoding={isTranscoding(v)}
+                showTranscode={!isBrowserPlayable(v) || isTranscoding(v)}
                 onToggleSelect={() => toggleSelect(v.id)}
                 onEdit={() => setEditing(v)}
                 onTranscode={() => setTranscodeTarget(v)}
@@ -956,6 +963,7 @@ function CurrentVideosTab({
           previewGenerating={isPreviewGenerating(editingVideo)}
           onRegenPreview={() => handleRegen(editingVideo)}
           transcoding={isTranscoding(editingVideo)}
+          unplayable={!isBrowserPlayable(editingVideo)}
           onTranscode={() => setTranscodeTarget(editingVideo)}
           onClose={() => setEditing(null)}
           onSaved={() => {
@@ -1734,6 +1742,7 @@ function CurrentVideoCard({
   driveName,
   selected,
   transcoding = false,
+  showTranscode = false,
   onToggleSelect,
   onEdit,
   onTranscode,
@@ -1743,6 +1752,7 @@ function CurrentVideoCard({
   driveName: string;
   selected: boolean;
   transcoding?: boolean;
+  showTranscode?: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
   onTranscode: () => void;
@@ -1778,20 +1788,22 @@ function CurrentVideoCard({
           >
             <Edit size={15} />
           </button>
-          <button
-            type="button"
-            className={`admin-btn admin-video-action-icon-button${transcoding ? " is-busy" : ""}`}
-            onClick={onTranscode}
-            disabled={transcoding}
-            title={transcoding ? "转码处理中（队列单任务进行）..." : "转码为标准 MP4（H.264+AAC）"}
-            aria-label="转码为标准 MP4"
-          >
-            {transcoding ? (
-              <RefreshCw size={15} className="admin-spin" />
-            ) : (
-              <Film size={15} />
-            )}
-          </button>
+          {showTranscode && (
+            <button
+              type="button"
+              className={`admin-btn admin-video-action-icon-button${transcoding ? " is-busy" : ""}`}
+              onClick={onTranscode}
+              disabled={transcoding}
+              title={transcoding ? "转码处理中（队列单任务进行）..." : "转码为标准 MP4（H.264+AAC）"}
+              aria-label="转码为标准 MP4"
+            >
+              {transcoding ? (
+                <RefreshCw size={15} className="admin-spin" />
+              ) : (
+                <Film size={15} />
+              )}
+            </button>
+          )}
           <VideoDeleteIconButton
             onClick={onDelete}
             title="删除视频"
@@ -1917,6 +1929,7 @@ function EditVideoModal({
   previewGenerating,
   onRegenPreview,
   transcoding = false,
+  unplayable = false,
   onTranscode,
   onClose,
   onSaved,
@@ -1926,6 +1939,7 @@ function EditVideoModal({
   previewGenerating: boolean;
   onRegenPreview: () => Promise<void>;
   transcoding?: boolean;
+  unplayable?: boolean;
   onTranscode?: () => void;
   onClose: () => void;
   onSaved: () => void;
@@ -1935,6 +1949,27 @@ function EditVideoModal({
   const [saving, setSaving] = useState(false);
   const [regeningPreview, setRegeningPreview] = useState(false);
   const { show } = useToast();
+
+  useEffect(() => {
+    const ext = (video.ext || "").toLowerCase().replace(/^\./, "");
+    if (ext !== "mp4" || unplayable) return;
+    const testVideo = document.createElement("video");
+    testVideo.preload = "metadata";
+    testVideo.src =
+      video.driveId === "local-upload"
+        ? `/p/upload/${encodeURIComponent(video.id)}`
+        : `/p/stream/${encodeURIComponent(video.driveId)}/${encodeURIComponent(video.fileId)}`;
+    const handleError = () => {
+      if (testVideo.error && (testVideo.error.code === 3 || testVideo.error.code === 4)) {
+        markVideoPlaybackUnsupported(video.id);
+      }
+    };
+    testVideo.addEventListener("error", handleError);
+    return () => {
+      testVideo.removeEventListener("error", handleError);
+      testVideo.src = "";
+    };
+  }, [video, unplayable]);
 
   async function handleSave() {
     setSaving(true);
@@ -2049,8 +2084,20 @@ function EditVideoModal({
             <div className="admin-video-edit-meta__item is-transcode">
               <dt>视频转码</dt>
               <dd className="admin-video-transcode-actions">
-                <span className={`admin-status ${transcoding ? "is-generating" : video.ext.toLowerCase() === ".mp4" ? "is-ok" : "is-pending"}`}>
-                  {transcoding ? "转码中 / 排队中" : video.ext.toLowerCase() === ".mp4" ? "MP4 (标准)" : `${video.ext || "非标准格式"}`}
+                <span
+                  className={`admin-status ${
+                    transcoding
+                      ? "is-generating"
+                      : unplayable
+                      ? "is-warning"
+                      : "is-ok"
+                  }`}
+                >
+                  {transcoding
+                    ? "转码中 / 排队中"
+                    : unplayable
+                    ? `${video.ext ? video.ext.toUpperCase() : "未知格式"} (不支持播放)`
+                    : "MP4 (正常可播)"}
                 </span>
                 <button
                   type="button"
@@ -2058,7 +2105,11 @@ function EditVideoModal({
                   onClick={onTranscode}
                   disabled={saving || transcoding}
                 >
-                  {transcoding ? "转码处理中..." : "转码为 MP4"}
+                  {transcoding
+                    ? "转码处理中..."
+                    : unplayable
+                    ? "转码为 MP4"
+                    : "重新转码为 MP4"}
                 </button>
               </dd>
             </div>
