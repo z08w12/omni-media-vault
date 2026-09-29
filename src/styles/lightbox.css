@@ -1,0 +1,62 @@
+/* Custom styles for yet-another-react-lightbox */
+
+:root {
+  --yarl__color_backdrop: rgba(10, 10, 14, 0.96);
+  --yarl__color_button: rgba(255, 255, 255, 0.82);
+  --yarl__color_button_active: #ffffff;
+  --yarl__color_button_disabled: rgba(255, 255, 255, 0.25);
+  --yarl__thumbnails_container_background_color: rgba(15, 15, 20, 0.88);
+  --yarl__thumbnails_thumbnail_background: rgba(0, 0, 0, 0.4);
+  --yarl__thumbnails_thumbnail_border_color: rgba(255, 255, 255, 0.15);
+  --yarl__thumbnails_thumbnail_active_border_color: var(--accent, #f6851b);
+}
+
+.yarl__portal {
+  z-index: 10000;
+}
+
+.yarl__button {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  transition: transform 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.yarl__button:hover {
+  transform: scale(1.08);
+}
+
+.yarl__slide_title {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.yarl__slide_description {
+  font-family: inherit;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.yarl__counter {
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", monospace;
+  font-size: 13px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+  margin: 12px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .yarl__button {
+    padding: 8px;
+  }
+  .yarl__counter {
+    font-size: 12px;
+    padding: 6px 10px;
+    margin: 8px;
+  }
+}

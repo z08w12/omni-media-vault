@@ -51,7 +51,7 @@ export async function fetchLatestHomeVideos(count: number): Promise<VideoItem[]>
 export async function fetchListing(
   page: number,
   pageSize: number,
-  params?: { q?: string; tag?: string; sort?: string; includeTotal?: boolean },
+  params?: { q?: string; tag?: string; sort?: string; mediaType?: string; includeTotal?: boolean },
   options: { signal?: AbortSignal } = {}
 ): Promise<{ items: VideoItem[]; total: number }> {
   const qs = new URLSearchParams({
@@ -61,6 +61,7 @@ export async function fetchListing(
   if (params?.q) qs.set("q", params.q);
   if (params?.tag) qs.set("tag", params.tag);
   if (params?.sort) qs.set("sort", params.sort);
+  if (params?.mediaType) qs.set("mediaType", params.mediaType);
   if (params?.includeTotal === false) qs.set("count", "false");
   const result = await apiGet<{ items: VideoItem[]; total: number }>(
     `/api/list?${qs.toString()}`,
@@ -111,6 +112,7 @@ export async function fetchVideoFeed(
     q?: string;
     tag?: string;
     sort?: string;
+    mediaType?: string;
   },
   options: { signal?: AbortSignal } = {}
 ): Promise<VideoFeedResponse> {
@@ -123,6 +125,7 @@ export async function fetchVideoFeed(
   if (input.q?.trim()) params.set("q", input.q.trim());
   if (input.tag?.trim()) params.set("tag", input.tag.trim());
   if (input.sort) params.set("sort", input.sort);
+  if (input.mediaType) params.set("mediaType", input.mediaType);
 
   let result: VideoFeedResponse;
   try {

@@ -29,10 +29,13 @@ import { driveKindAbbr, driveKindIconPath } from "./drive/constants";
 import { SpiderIcon } from "./icons/SpiderIcon";
 import {
   adminVideosSourceFilter,
+  readAdminVideosMediaType,
   readAdminVideosPage,
   readAdminVideosSourceKey,
+  withAdminVideosMediaType,
   withAdminVideosPage,
   withAdminVideosSourceKey,
+  type AdminVideosMediaType,
   type AdminVideosSourceKey,
 } from "./videosSearchParams";
 import { useAdminFloatingActionSpace } from "./useAdminFloatingActionSpace";
@@ -112,7 +115,21 @@ export function VideosPage() {
   const activeView: VideoViewKey = rawTab === "blacklist" ? "blacklist" : "current";
   const activeSourceKey = readAdminVideosSourceKey(searchParams);
   const activeSourceFilter = adminVideosSourceFilter(activeSourceKey);
+  const activeMediaType = readAdminVideosMediaType(searchParams);
   const page = readAdminVideosPage(searchParams);
+  const selectMediaType = useCallback(
+    (nextMediaType: AdminVideosMediaType) => {
+      setSearchParams(
+        (prev) => {
+          const next = withAdminVideosMediaType(prev, nextMediaType);
+          next.delete("page");
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
   const setPage = useCallback<PageSetter>((nextPage) => {
     setSearchParams(
       (prev) => {
@@ -228,6 +245,8 @@ export function VideosPage() {
           sourceDriveId={activeSourceFilter.driveId}
           sourceCrawlerId={activeSourceFilter.crawlerId}
           sourceKind={activeSourceFilter.sourceKind}
+          mediaType={activeMediaType}
+          onSelectMediaType={selectMediaType}
           page={page}
           setPage={setPage}
         />
@@ -389,6 +408,8 @@ function CurrentVideosTab({
   sourceDriveId,
   sourceCrawlerId,
   sourceKind,
+  mediaType = "all",
+  onSelectMediaType,
   page,
   setPage,
 }: {
@@ -396,6 +417,8 @@ function CurrentVideosTab({
   sourceDriveId: string;
   sourceCrawlerId: string;
   sourceKind: "" | "telegram";
+  mediaType: AdminVideosMediaType;
+  onSelectMediaType: (type: AdminVideosMediaType) => void;
   page: number;
   setPage: PageSetter;
 }) {
@@ -439,6 +462,7 @@ function CurrentVideosTab({
     sourceDriveId,
     sourceCrawlerId,
     sourceKind,
+    mediaType,
     appliedFilters,
   ]);
   const activeListQueryKeyRef = useRef(activeListQueryKey);
@@ -457,6 +481,7 @@ function CurrentVideosTab({
         driveId: sourceDriveId,
         crawlerId: sourceCrawlerId,
         sourceKind,
+        mediaType: mediaType === "all" ? undefined : mediaType,
         ...appliedFilters,
       });
       if (requestId !== listRequestIdRef.current || queryKey !== activeListQueryKeyRef.current) return;
@@ -487,6 +512,7 @@ function CurrentVideosTab({
         driveId: sourceDriveId,
         crawlerId: sourceCrawlerId,
         sourceKind,
+        mediaType: mediaType === "all" ? undefined : mediaType,
         ...appliedFilters,
       });
       if (queryKey !== activeListQueryKeyRef.current) return;
@@ -507,7 +533,7 @@ function CurrentVideosTab({
 
   useEffect(() => {
     refresh();
-  }, [page, searchKeyword, pageSize, sourceDriveId, sourceCrawlerId, sourceKind, appliedFilters]);
+  }, [page, searchKeyword, pageSize, sourceDriveId, sourceCrawlerId, sourceKind, mediaType, appliedFilters]);
 
   useEffect(() => {
     let active = true;
@@ -826,6 +852,35 @@ function CurrentVideosTab({
   return (
     <div className={`admin-videos-current${selectedIds.size > 0 ? " has-bulk-actions" : ""}`}>
       <div className="admin-page__actions admin-videos-filter admin-videos-filter--current">
+        <div className="admin-media-type-switch" role="tablist" aria-label="媒体类型筛选">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mediaType === "all"}
+            className={`admin-media-type-btn ${mediaType === "all" ? "is-active" : ""}`}
+            onClick={() => onSelectMediaType("all")}
+          >
+            全部
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mediaType === "video"}
+            className={`admin-media-type-btn ${mediaType === "video" ? "is-active" : ""}`}
+            onClick={() => onSelectMediaType("video")}
+          >
+            视频
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mediaType === "image"}
+            className={`admin-media-type-btn ${mediaType === "image" ? "is-active" : ""}`}
+            onClick={() => onSelectMediaType("image")}
+          >
+            图片
+          </button>
+        </div>
         <SearchBox keyword={searchKeyword} onSearch={handleSearch} />
         <div className="admin-videos-filter__current-actions" data-admin-floating-actions>
           <button
@@ -911,19 +966,19 @@ function CurrentVideosTab({
       ) : listItems.length === 0 ? (
         <AdminEmptyVisual
           variant={hasActiveSearch ? "no-results" : "empty"}
-          text={hasActiveSearch ? "未查询到" : "当前库中没有视频"}
+          text={hasActiveSearch ? "未查询到" : "当前库中没有媒体文件"}
           className="admin-empty-state admin-empty-state--plain"
         />
       ) : (
         <section
           className={`admin-videos-results${listQueryPending ? " is-page-loading" : ""}`}
-          aria-label="视频列表结果"
+          aria-label="媒体列表结果"
           aria-busy={listQueryPending || undefined}
         >
           <div
             className="admin-video-card-grid admin-videos-results__content"
             role="list"
-            aria-label="视频列表"
+            aria-label="媒体列表"
           >
             {listItems.map((v) => (
               <CurrentVideoCard
@@ -932,7 +987,7 @@ function CurrentVideosTab({
                 driveName={driveNameMap.get(v.driveId) ?? v.driveId}
                 selected={selectedIds.has(v.id)}
                 transcoding={isTranscoding(v)}
-                showTranscode={!isBrowserPlayable(v) || isTranscoding(v)}
+                showTranscode={!isImageExtension(v.ext) && (!isBrowserPlayable(v) || isTranscoding(v))}
                 onToggleSelect={() => toggleSelect(v.id)}
                 onEdit={() => setEditing(v)}
                 onTranscode={() => setTranscodeTarget(v)}
@@ -948,7 +1003,7 @@ function CurrentVideosTab({
               page={displayedPage ?? page}
               totalPages={totalPages}
               total={total}
-              itemLabel="视频"
+              itemLabel="项"
               pending={listQueryPending}
               onPage={setPage}
             />
@@ -988,7 +1043,7 @@ function CurrentVideosTab({
       )}
       <ConfirmModal
         open={deleteTarget !== null}
-        title="删除视频"
+        title="删除媒体"
         message={deleteTarget ? `确定要删除「${deleteTarget.title}」吗？` : ""}
         confirmText="确认"
         danger
@@ -1008,8 +1063,8 @@ function CurrentVideosTab({
       </ConfirmModal>
       <ConfirmModal
         open={batchDeleteOpen}
-        title="批量删除视频"
-        message={`确定要删除已选中的 ${selectedIds.size} 个视频吗？`}
+        title="批量删除媒体"
+        message={`确定要删除已选中的 ${selectedIds.size} 项媒体吗？`}
         confirmText="确认"
         danger
         hideIcon
@@ -1737,6 +1792,11 @@ function VideoDeleteIconButton({
   );
 }
 
+function isImageExtension(ext?: string): boolean {
+  const clean = (ext || "").toLowerCase().replace(/^\./, "").trim();
+  return ["jpg", "jpeg", "png", "webp", "gif", "bmp"].includes(clean);
+}
+
 function CurrentVideoCard({
   video,
   driveName,
@@ -1758,6 +1818,8 @@ function CurrentVideoCard({
   onTranscode: () => void;
   onDelete: () => void;
 }) {
+  const isImage = isImageExtension(video.ext);
+
   return (
     <article className="admin-video-card" role="listitem">
       <div className="admin-video-card__content">
@@ -1772,8 +1834,8 @@ function CurrentVideoCard({
           </dd>
         </div>
         <div className="admin-video-card__meta-item is-duration">
-          <dt>时长</dt>
-          <dd>{formatDur(video.durationSeconds)}</dd>
+          <dt>{isImage ? "类型" : "时长"}</dt>
+          <dd>{isImage ? "图片" : formatDur(video.durationSeconds)}</dd>
         </div>
       </dl>
 
@@ -1783,8 +1845,8 @@ function CurrentVideoCard({
             type="button"
             className="admin-btn admin-video-action-icon-button"
             onClick={onEdit}
-            title="编辑视频"
-            aria-label="编辑视频"
+            title={isImage ? "编辑媒体" : "编辑视频"}
+            aria-label={isImage ? "编辑媒体" : "编辑视频"}
           >
             <Edit size={15} />
           </button>
@@ -1806,11 +1868,11 @@ function CurrentVideoCard({
           )}
           <VideoDeleteIconButton
             onClick={onDelete}
-            title="删除视频"
-            ariaLabel="删除视频"
+            title={isImage ? "删除媒体" : "删除视频"}
+            ariaLabel={isImage ? "删除媒体" : "删除视频"}
           />
         </div>
-        <label className="admin-video-card__select" title={selected ? "取消选择" : "选择视频"}>
+        <label className="admin-video-card__select" title={selected ? "取消选择" : "选择"}>
           <input
             className="admin-video-card__select-input"
             type="checkbox"
@@ -2000,8 +2062,8 @@ function EditVideoModal({
   return (
     <Modal
       open
-      title="编辑视频"
-      ariaLabel="编辑视频"
+      title="编辑媒体"
+      ariaLabel="编辑媒体"
       className="admin-modal--video-edit"
       onClose={onClose}
       footer={
@@ -2012,7 +2074,7 @@ function EditVideoModal({
             target="_blank"
             rel="noreferrer"
           >
-            查看视频播放页
+            查看媒体详情
           </Link>
           <div className="admin-video-edit-footer-actions">
             <button type="button" className="admin-btn" onClick={onClose}>
@@ -2057,7 +2119,7 @@ function EditVideoModal({
         </section>
 
         <section className="admin-video-edit-section">
-          <h3>视频信息</h3>
+          <h3>媒体信息</h3>
           <dl className="admin-video-edit-meta">
             <div className="admin-video-edit-meta__item">
               <dt>来源盘</dt>

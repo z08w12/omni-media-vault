@@ -414,10 +414,18 @@ func publicListParams(r *http.Request) catalog.ListParams {
 	default:
 		sortKey = ""
 	}
+	mediaType := strings.ToLower(strings.TrimSpace(q.Get("mediaType")))
+	if mediaType == "" {
+		mediaType = strings.ToLower(strings.TrimSpace(q.Get("type")))
+	}
+	if mediaType != "video" && mediaType != "image" {
+		mediaType = ""
+	}
 	return catalog.ListParams{
 		Keyword:               strings.TrimSpace(q.Get("q")),
 		Tag:                   strings.TrimSpace(q.Get("tag")),
 		Sort:                  sortKey,
+		MediaType:             mediaType,
 		Page:                  page,
 		PageSize:              size,
 		SkipTotal:             strings.EqualFold(q.Get("count"), "false"),

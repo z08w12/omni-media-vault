@@ -1,0 +1,277 @@
+/* ---------- 图集专区样式 ---------- */
+
+.photos-page {
+  padding-bottom: var(--space-8, 64px);
+}
+
+.photos-header {
+  margin: var(--space-4, 24px) 0 var(--space-3, 16px);
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(246, 133, 27, 0.08) 0%, rgba(20, 20, 25, 0.6) 100%);
+  border: 1px solid rgba(246, 133, 27, 0.2);
+  border-radius: var(--radius-lg, 12px);
+  backdrop-filter: blur(8px);
+}
+
+.photos-header__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.photos-header__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+}
+
+.photos-header__badge svg {
+  color: var(--accent, #f6851b);
+}
+
+.photos-header__count {
+  font-size: 13px;
+  color: var(--text-secondary, #999);
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", monospace;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.photos-header__desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+}
+
+/* 网格布局 */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.photos-grid.view-compact {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* 卡片样式 */
+.photo-card {
+  position: relative;
+  background: var(--bg-surface, #141418);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.photo-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(246, 133, 27, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.photo-card__thumb-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #0a0a0e;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.photo-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+  display: block;
+}
+
+.photo-card:hover .photo-card__img {
+  transform: scale(1.04);
+}
+
+.photo-card__tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.photo-card__hover-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.photo-card:hover .photo-card__hover-mask {
+  opacity: 1;
+}
+
+.photo-card__action-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.photo-card__action-btn:hover {
+  transform: scale(1.15);
+  background: var(--accent, #f6851b);
+  border-color: var(--accent, #f6851b);
+}
+
+.photo-card__body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.photo-card__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.photo-card__title-link {
+  color: var(--text-primary, #fff);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.photo-card__title-link:hover {
+  color: var(--accent, #f6851b);
+}
+
+.photo-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.photo-card__author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.photo-card__stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-card__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+
+/* 骨架屏 */
+.photo-card.is-skeleton {
+  pointer-events: none;
+}
+
+.photo-card__thumb-frame.is-skeleton {
+  background: linear-gradient(90deg, #181820 25%, #252530 50%, #181820 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: #202028;
+}
+
+.skeleton-line.is-title {
+  width: 85%;
+  height: 14px;
+  margin-bottom: 6px;
+}
+
+.skeleton-line.is-meta {
+  width: 50%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .photos-header {
+    margin: var(--space-2, 12px) 0;
+    padding: 12px 14px;
+  }
+
+  .photos-header__badge {
+    font-size: 16px;
+  }
+
+  .photo-card__hover-mask {
+    /* 移动端触摸屏直接点击打开，不强依赖 hover 遮罩 */
+    display: none;
+  }
+
+  .photo-card__body {
+    padding: 8px 10px;
+  }
+
+  .photo-card__title {
+    font-size: 13px;
+  }
+}

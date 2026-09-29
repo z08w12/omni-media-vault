@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import {
+  Images,
   LogOut,
   X,
 } from "lucide-react";
@@ -8,6 +9,10 @@ import { useAuth } from "@/admin/AuthContext";
 import { UploadIcon } from "@/components/icons/UploadIcon";
 import { VideoIcon } from "@/components/icons/VideoIcon";
 import { requestShortsFullscreen } from "@/shorts/fullscreen";
+
+function GalleryIcon({ size = 16 }: { size?: number }) {
+  return <Images size={size} aria-hidden="true" />;
+}
 
 // Font Awesome Free 7.3.1 by Fonticons, Inc. — https://fontawesome.com/license/free
 function ShortVideoIcon({ size = 16 }: { size?: number }) {
@@ -69,6 +74,7 @@ function MobileMenuIcon({ size = 26 }: { size?: number }) {
 const navItems = [
   { to: "/shorts", label: "短视频", icon: ShortVideoIcon },
   { to: "/list", label: "视频", icon: VideoIcon },
+  { to: "/photos", label: "图集", icon: GalleryIcon },
 ];
 
 const uploadNavItem = { to: "/upload", label: "上传", icon: UploadIcon };

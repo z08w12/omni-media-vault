@@ -1,11 +1,21 @@
-import { memo, useState } from "react";
-import { Download, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
+import { memo, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Maximize2 } from "lucide-react";
+import { PhotoLightbox, type PhotoSlide } from "./PhotoLightbox";
+
+export type ImageItemInfo = {
+  src: string;
+  title: string;
+  poster?: string;
+  id?: string;
+};
 
 type Props = {
   src: string;
   poster?: string;
   title: string;
   onView?: () => void;
+  relatedImages?: ImageItemInfo[];
+  onSelectImage?: (item: ImageItemInfo) => void;
 };
 
 export const ImageViewer = memo(function ImageViewer({
@@ -13,28 +23,73 @@ export const ImageViewer = memo(function ImageViewer({
   poster,
   title,
   onView,
+  relatedImages = [],
+  onSelectImage,
 }: Props) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
   const displaySrc = src || poster || "";
 
-  function handleImageClick() {
-    setIsFullscreen((prev) => !prev);
+  // 构建画廊幻灯片列表：当前图片优先放在第一个，其余相关图片去重跟随
+  const slides: PhotoSlide[] = useMemo(() => {
+    const list: PhotoSlide[] = [];
+    const seen = new Set<string>();
+
+    if (displaySrc) {
+      list.push({
+        src: displaySrc,
+        title: title || "图片",
+        downloadUrl: displaySrc,
+      });
+      seen.add(displaySrc);
+    }
+
+    for (const img of relatedImages) {
+      const s = img.src || img.poster;
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        list.push({
+          src: s,
+          title: img.title || "图片",
+          downloadUrl: s,
+          id: img.id,
+        });
+      }
+    }
+    return list;
+  }, [displaySrc, title, relatedImages]);
+
+  function handleOpenLightbox(index = 0) {
+    setActiveSlideIndex(index);
+    setLightboxOpen(true);
     if (onView) onView();
   }
 
+  function handlePrevImage(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (slides.length <= 1) return;
+    const nextIdx = (activeSlideIndex - 1 + slides.length) % slides.length;
+    setActiveSlideIndex(nextIdx);
+    if (onSelectImage && relatedImages[nextIdx - 1]) {
+      onSelectImage(relatedImages[nextIdx - 1]);
+    }
+  }
+
+  function handleNextImage(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (slides.length <= 1) return;
+    const nextIdx = (activeSlideIndex + 1) % slides.length;
+    setActiveSlideIndex(nextIdx);
+    if (onSelectImage && relatedImages[nextIdx - 1]) {
+      onSelectImage(relatedImages[nextIdx - 1]);
+    }
+  }
+
   return (
-    <div
-      className={`image-viewer-container ${isFullscreen ? "image-viewer--fullscreen" : ""}`}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && isFullscreen) {
-          setIsFullscreen(false);
-        }
-      }}
-    >
+    <div className="image-viewer-container" tabIndex={0}>
       <div className="image-viewer-stage">
         {!loaded && !error && (
           <div className="image-viewer-loading">
@@ -59,21 +114,51 @@ export const ImageViewer = memo(function ImageViewer({
               setError(true);
               setLoaded(true);
             }}
-            onClick={handleImageClick}
-            title="点击切换全屏浏览"
+            onClick={() => handleOpenLightbox(0)}
+            title="点击进入全屏查看器（支持手势缩放与左右切换）"
           />
+        )}
+
+        {/* 幻灯片左右悬浮切换按钮（当存在多张图片时展示） */}
+        {slides.length > 1 && (
+          <>
+            <button
+              type="button"
+              className="image-viewer-nav-btn is-prev"
+              onClick={handlePrevImage}
+              aria-label="查看上一张图片"
+              title="上一张图片"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              type="button"
+              className="image-viewer-nav-btn is-next"
+              onClick={handleNextImage}
+              aria-label="查看下一张图片"
+              title="下一张图片"
+            >
+              <ChevronRight size={22} />
+            </button>
+          </>
         )}
       </div>
 
       <div className="image-viewer-toolbar">
+        {slides.length > 1 && (
+          <span className="image-viewer-counter" aria-label="图片序号">
+            {activeSlideIndex + 1} / {slides.length}
+          </span>
+        )}
+
         <button
           type="button"
           className="image-viewer-btn"
-          onClick={() => setIsFullscreen((prev) => !prev)}
-          title={isFullscreen ? "退出全屏 (Esc)" : "全屏查看"}
+          onClick={() => handleOpenLightbox(0)}
+          title="全屏多功能查看（支持放大缩小、手势缩放与左右翻页）"
         >
-          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-          <span>{isFullscreen ? "缩小" : "全屏"}</span>
+          <Maximize2 size={16} />
+          <span>全屏预览</span>
         </button>
 
         <a
@@ -84,7 +169,7 @@ export const ImageViewer = memo(function ImageViewer({
           className="image-viewer-btn"
           title="下载图片原图"
         >
-          <Download size={18} />
+          <Download size={16} />
           <span>下载原图</span>
         </a>
 
@@ -95,10 +180,20 @@ export const ImageViewer = memo(function ImageViewer({
           className="image-viewer-btn"
           title="新标签页打开原图"
         >
-          <ExternalLink size={18} />
-          <span>原图</span>
+          <ExternalLink size={16} />
+          <span>新标签打开</span>
         </a>
       </div>
+
+      {/* 现代专业全屏预览插件（支持双指缩放、滚轮放大、左右滑动翻页） */}
+      <PhotoLightbox
+        open={lightboxOpen}
+        slides={slides}
+        index={activeSlideIndex}
+        onClose={() => setLightboxOpen(false)}
+        onIndexChange={(idx) => setActiveSlideIndex(idx)}
+        showThumbnails={slides.length > 1}
+      />
     </div>
   );
 });

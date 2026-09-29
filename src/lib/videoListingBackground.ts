@@ -27,7 +27,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 export function isVideoListingPath(pathname: string): boolean {
   const normalized =
     pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  return normalized === "/" || normalized.toLowerCase() === "/list";
+  const lower = normalized.toLowerCase();
+  return lower === "/" || lower === "/list" || lower === "/photos";
 }
 
 function retainedListingState(state: unknown): RetainedListingState | null {

@@ -6,6 +6,7 @@ import {
   homeLatestFeedSource,
   homeRecommendationFeedSource,
   listingFeedSource,
+  photosFeedSource,
 } from "../src/lib/infiniteFeedSource.ts";
 import { setVideoLike } from "../src/data/videos.ts";
 

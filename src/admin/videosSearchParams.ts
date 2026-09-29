@@ -90,3 +90,26 @@ function normalizeAdminVideosSourceKey(
   }
   return "all";
 }
+
+export type AdminVideosMediaType = "all" | "video" | "image";
+
+export function readAdminVideosMediaType(params: URLSearchParams): AdminVideosMediaType {
+  const value = (params.get("mediaType") || params.get("type"))?.trim().toLowerCase();
+  if (value === "video" || value === "image") return value;
+  return "all";
+}
+
+export function withAdminVideosMediaType(
+  params: URLSearchParams,
+  mediaType: AdminVideosMediaType
+): URLSearchParams {
+  const next = new URLSearchParams(params);
+  if (mediaType === "all") {
+    next.delete("mediaType");
+    next.delete("type");
+  } else {
+    next.delete("type");
+    next.set("mediaType", mediaType);
+  }
+  return next;
+}

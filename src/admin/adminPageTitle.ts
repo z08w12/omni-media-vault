@@ -1,7 +1,7 @@
 export const ADMIN_PAGE_TITLES = [
   { path: "/admin/drives", title: "网盘管理" },
   { path: "/admin/crawlers", title: "爬虫管理" },
-  { path: "/admin/videos", title: "视频管理" },
+  { path: "/admin/videos", title: "媒体管理" },
   { path: "/admin/tags", title: "标签管理" },
   { path: "/admin/users", title: "用户管理" },
   { path: "/admin/backup", title: "备份恢复" },

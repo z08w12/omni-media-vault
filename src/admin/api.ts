@@ -1050,6 +1050,7 @@ export type AdminVideoListParams = {
   driveId?: string;
   crawlerId?: string;
   sourceKind?: "" | "telegram";
+  mediaType?: "" | "all" | "video" | "image";
   createdFrom?: string;
   createdTo?: string;
   durationMinMinutes?: string;
@@ -1066,6 +1067,7 @@ export function listVideos(
   if (params.driveId) qs.set("driveId", params.driveId);
   if (params.crawlerId) qs.set("crawlerId", params.crawlerId);
   if (params.sourceKind) qs.set("sourceKind", params.sourceKind);
+  if (params.mediaType && params.mediaType !== "all") qs.set("mediaType", params.mediaType);
   if (params.createdFrom) qs.set("createdFrom", params.createdFrom);
   if (params.createdTo) qs.set("createdTo", params.createdTo);
   if (params.durationMinMinutes) qs.set("durationMinMinutes", params.durationMinMinutes);

@@ -97,7 +97,7 @@ test("every admin page has a centralized title", () => {
     [
       ["/admin/drives", "网盘管理"],
       ["/admin/crawlers", "爬虫管理"],
-      ["/admin/videos", "视频管理"],
+      ["/admin/videos", "媒体管理"],
       ["/admin/tags", "标签管理"],
       ["/admin/users", "用户管理"],
       ["/admin/backup", "备份恢复"],

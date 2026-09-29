@@ -165,6 +165,20 @@ function VideoDetailContent({ id }: { id?: string }) {
     () => filterDeletedVideos(recommendations, deletedVideoIDs),
     [recommendations, deletedVideoIDs]
   );
+  const relatedImages = useMemo(() => {
+    return visibleRecommendations
+      .filter(
+        (v) =>
+          v.duration === "图片" ||
+          Boolean(v.thumbnail && /\.(jpe?g|png|webp|gif|bmp)(\?.*)?$/i.test(v.thumbnail))
+      )
+      .map((v) => ({
+        id: v.id,
+        src: `/api/video/${v.id}/source`,
+        title: v.title,
+        poster: v.thumbnail,
+      }));
+  }, [visibleRecommendations]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(
     !!id && initialRecommendations === null
   );
@@ -518,6 +532,8 @@ function VideoDetailContent({ id }: { id?: string }) {
                       poster={detail.poster}
                       title={detail.title}
                       onView={handleFirstPlay}
+                      relatedImages={relatedImages}
+                      onSelectImage={(item) => item.id && navigate(`/video/${item.id}`)}
                     />
                   ) : (
                     <VideoPlayer

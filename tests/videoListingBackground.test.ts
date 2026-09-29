@@ -61,10 +61,11 @@ test("video detail navigation retains one same-document listing location", () =>
   );
 });
 
-test("only home and list pages can become retained video backgrounds", () => {
+test("home, list and photos pages can become retained video backgrounds", () => {
   assert.equal(isVideoListingPath("/"), true);
   assert.equal(isVideoListingPath("/list"), true);
   assert.equal(isVideoListingPath("/list/"), true);
+  assert.equal(isVideoListingPath("/photos"), true);
   assert.equal(isVideoListingPath("/shorts"), false);
   const unrelated: Location = {
     ...listingLocation,

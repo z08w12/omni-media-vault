@@ -38,9 +38,10 @@ type videoFeedSession struct {
 // ID set is identical for every authenticated user. Batch size is deliberately
 // absent because it does not change the logical result set.
 type videoFeedSnapshotKey struct {
-	keyword string
-	tag     string
-	sort    string
+	keyword   string
+	tag       string
+	sort      string
+	mediaType string
 }
 
 type videoFeedSnapshotSeed struct {
@@ -163,9 +164,10 @@ func (s *Server) newVideoFeedSnapshot(r *http.Request) (videoFeedSnapshotSeed, e
 			sortKey = "latest"
 		}
 		sharedKey := videoFeedSnapshotKey{
-			keyword: params.Keyword,
-			tag:     params.Tag,
-			sort:    sortKey,
+			keyword:   params.Keyword,
+			tag:       params.Tag,
+			sort:      sortKey,
+			mediaType: params.MediaType,
 		}
 		return videoFeedSnapshotSeed{videoIDs: videoIDs, sharedKey: &sharedKey}, nil
 	case "recommend":

@@ -52,6 +52,7 @@ import {
 
 const HomePage = lazy(() => import("@/pages/HomePage"));
 const ListingPage = lazy(() => import("@/pages/ListingPage"));
+const PhotosPage = lazy(() => import("@/pages/PhotosPage"));
 const ShortsPage = lazy(() => import("@/pages/ShortsPage"));
 const UploadPage = lazy(() => import("@/pages/UploadPage"));
 const VideoDetailPage = lazy(loadVideoDetailPage);
@@ -162,6 +163,16 @@ function ListingRoutes({ location }: { location: Location }) {
           <RequireAuth>
             <PageSuspense>
               <ListingPage />
+            </PageSuspense>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/photos"
+        element={
+          <RequireAuth>
+            <PageSuspense>
+              <PhotosPage />
             </PageSuspense>
           </RequireAuth>
         }

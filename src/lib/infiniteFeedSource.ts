@@ -69,6 +69,7 @@ export type ListingFeedQuery = {
   tag: string;
   sort: SortKey;
   pageSize: number;
+  mediaType?: string;
 };
 
 function snapshotFeedSource(input: {
@@ -78,6 +79,7 @@ function snapshotFeedSource(input: {
   q?: string;
   tag?: string;
   sort?: SortKey;
+  mediaType?: string;
 }): InfiniteFeedSource {
   return {
     key: input.key,
@@ -92,6 +94,7 @@ function snapshotFeedSource(input: {
           q: input.q,
           tag: input.tag,
           sort: input.sort,
+          mediaType: input.mediaType,
         },
         { signal: options.signal }
       );
@@ -116,6 +119,19 @@ export function listingFeedSource(query: ListingFeedQuery): InfiniteFeedSource {
     q: query.q.trim(),
     tag: query.tag.trim(),
     sort: query.sort,
+    mediaType: query.mediaType,
+  });
+}
+
+export function photosFeedSource(query: ListingFeedQuery): InfiniteFeedSource {
+  return snapshotFeedSource({
+    key: `photos:${infiniteListingKey(query)}`,
+    kind: "listing",
+    batchSize: query.pageSize,
+    q: query.q.trim(),
+    tag: query.tag.trim(),
+    sort: query.sort,
+    mediaType: "image",
   });
 }
 

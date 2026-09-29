@@ -459,7 +459,7 @@ export function AdminLayout() {
                 <VideoIcon size={15} />
               </span>
               <span className="admin-nav__text">
-                <span className="admin-nav__title">视频管理</span>
+                <span className="admin-nav__title">媒体管理</span>
               </span>
             </NavLink>
             <NavLink

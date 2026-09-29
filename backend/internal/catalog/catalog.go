@@ -2664,6 +2664,7 @@ type ListParams struct {
 	SourceKind            string // telegram; import provenance independent of current drive
 	Tag                   string
 	Sort                  string // latest | hot | recent
+	MediaType             string // "" or "all" | "video" | "image"
 	ThumbnailReadyOnly    bool
 	PreferReadyThumbnails bool
 	SkipTotal             bool
@@ -2734,6 +2735,11 @@ func buildVideoListQuery(p ListParams) videoListQuery {
 	if p.Tag != "" {
 		where = append(where, videoMatchesTagLabelSQL("videos"))
 		args = append(args, p.Tag)
+	}
+	if p.MediaType == "image" {
+		where = append(where, "LOWER(TRIM(COALESCE(videos.ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')")
+	} else if p.MediaType == "video" {
+		where = append(where, "LOWER(TRIM(COALESCE(videos.ext, ''), '.')) NOT IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')")
 	}
 	if p.ThumbnailReadyOnly {
 		where = append(where, "COALESCE(thumbnail_url, '') != ''")

@@ -48,11 +48,23 @@ func (a *AdminServer) handleAdminListVideos(w http.ResponseWriter, r *http.Reque
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	mediaType := strings.ToLower(strings.TrimSpace(q.Get("mediaType")))
+	if mediaType == "" {
+		mediaType = strings.ToLower(strings.TrimSpace(q.Get("type")))
+	}
+	if mediaType != "" && mediaType != "all" && mediaType != "video" && mediaType != "image" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("无效的媒体类型筛选参数"))
+		return
+	}
+	if mediaType == "all" {
+		mediaType = ""
+	}
 	items, total, err := a.Catalog.ListVideos(r.Context(), catalog.ListParams{
 		Keyword:            q.Get("keyword"),
 		DriveID:            q.Get("driveId"),
 		CrawlerID:          strings.TrimSpace(q.Get("crawlerId")),
 		SourceKind:         sourceKind,
+		MediaType:          mediaType,
 		CreatedAtFrom:      createdAtFrom,
 		CreatedAtBefore:    createdAtBefore,
 		DurationSecondsMin: durationSecondsMin,
