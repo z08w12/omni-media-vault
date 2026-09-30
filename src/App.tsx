@@ -239,7 +239,7 @@ function OtherRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/admin/videos" replace />} />
+        <Route index element={<Navigate to="/admin/crawlers" replace />} />
         <Route
           path="crawlers"
           element={
