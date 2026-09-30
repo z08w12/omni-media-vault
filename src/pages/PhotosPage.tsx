@@ -69,26 +69,51 @@ export default function PhotosPage() {
     active: routeActive,
   });
 
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
   const hasMore = listing.hasMore;
   const loadingMore = listing.loadingMore;
   const loadMore = listing.loadMore;
+  const items = listing.items;
 
+  // 1. IntersectionObserver 触底观测（采用 callback ref 动态获取 DOM 节点，解决骨架屏切换时 ref 为空导致监听丢失的问题）
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore || loadingMore) return;
+    if (!sentinelEl || !hasMore || loadingMore || !routeActive) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
           loadMore();
         }
       },
-      { rootMargin: "400px" }
+      { rootMargin: "600px" }
     );
-    observer.observe(sentinelRef.current);
+    observer.observe(sentinelEl);
     return () => observer.disconnect();
-  }, [hasMore, loadingMore, loadMore]);
+  }, [sentinelEl, hasMore, loadingMore, loadMore, routeActive]);
 
-  const items = listing.items;
+  // 2. 窗口滚动监听双重兜底：滚动到距离底部 600px 以内时自动加载下一页
+  useEffect(() => {
+    if (!routeActive || !hasMore || loadingMore) return;
+
+    const checkAndLoadMore = () => {
+      if (!hasMore || loadingMore) return;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      if (scrollHeight - (scrollTop + clientHeight) < 600) {
+        loadMore();
+      }
+    };
+
+    window.addEventListener("scroll", checkAndLoadMore, { passive: true });
+    window.addEventListener("resize", checkAndLoadMore, { passive: true });
+    checkAndLoadMore();
+
+    return () => {
+      window.removeEventListener("scroll", checkAndLoadMore);
+      window.removeEventListener("resize", checkAndLoadMore);
+    };
+  }, [hasMore, loadingMore, loadMore, routeActive, items.length]);
   const hasContent = items.length > 0;
   const showSkeleton = listing.initialLoading && !hasContent;
   const showEmptyError = listing.failed && !hasContent;
@@ -304,9 +329,26 @@ export default function PhotosPage() {
                   ))}
                 </div>
 
-                <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+                <div
+                  ref={setSentinelEl}
+                  className="photos-sentinel"
+                  style={{ height: "20px", margin: "16px 0" }}
+                  aria-hidden="true"
+                />
 
                 {loadingMore && <InfiniteFeedStatus state="loading" />}
+
+                {hasMore && !loadingMore && !showTailError && (
+                  <div className="photos-load-more" style={{ display: "flex", justifyContent: "center", margin: "24px 0" }}>
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      onClick={() => loadMore()}
+                    >
+                      加载更多图片
+                    </button>
+                  </div>
+                )}
 
                 {showTailError ? (
                   <ListingLoadError hasContent onRetry={listing.retry} />
