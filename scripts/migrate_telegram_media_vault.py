@@ -85,6 +85,19 @@ def main():
 
     now_ms = int(time.time() * 1000)
 
+    # Ensure TG and image tags exist
+    tag_ids = {}
+    for tag_label, tag_origin in [("TG", "telegram"), ("图片", "user")]:
+        row = new_conn.execute("SELECT id FROM tags WHERE label = ?", (tag_label,)).fetchone()
+        if row:
+            tag_ids[tag_label] = row[0]
+        else:
+            cur = new_conn.execute(
+                "INSERT INTO tags (label, match_rules, source, origin, created_at, updated_at) VALUES (?, '{}', 'user', ?, ?, ?)",
+                (tag_label, tag_origin, now_ms, now_ms),
+            )
+            tag_ids[tag_label] = cur.lastrowid
+
     for item in rows:
         old_id = item["id"]
         rel_path = item["relative_path"] or item["stored_name"]
@@ -157,14 +170,14 @@ def main():
 
         try:
             with new_conn:
-                # 1. Insert video record
+                # 1. Insert video record with drive_id = 'telegram-local'
                 new_conn.execute(
                     """
                     INSERT OR REPLACE INTO videos (
                         id, drive_id, file_id, file_name, title, author,
                         tags, duration_seconds, size_bytes, ext, thumbnail_status,
                         preview_status, views, description, published_at, created_at, updated_at
-                    ) VALUES (?, 'telegram', ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?, ?, ?, ?)
+                    ) VALUES (?, 'telegram-local', ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0, ?, ?, ?, ?)
                     """,
                     (
                         video_id,
@@ -190,15 +203,34 @@ def main():
                     (file_id, job_id),
                 )
 
-                # 3. Insert telegram_files record (for dedup)
-                if item["telegram_file_id"]:
+                # 3. Insert telegram_files record (for dedup and provenance)
+                tg_file_id = item["telegram_file_id"] or file_id
+                new_conn.execute(
+                    """
+                    INSERT OR REPLACE INTO telegram_files (
+                        bot_id, file_unique_id, file_id, job_id, video_id
+                    ) VALUES (0, ?, ?, ?, ?)
+                    """,
+                    (tg_file_id, tg_file_id, job_id, video_id),
+                )
+
+                # 4. Link video_tags
+                for tag_name in tags:
+                    tid = tag_ids.get(tag_name)
+                    if not tid:
+                        trow = new_conn.execute("SELECT id FROM tags WHERE label = ?", (tag_name,)).fetchone()
+                        if trow:
+                            tid = trow[0]
+                        else:
+                            tcur = new_conn.execute(
+                                "INSERT INTO tags (label, match_rules, source, origin, created_at, updated_at) VALUES (?, '{}', 'user', 'telegram', ?, ?)",
+                                (tag_name, now_ms, now_ms),
+                            )
+                            tid = tcur.lastrowid
+                        tag_ids[tag_name] = tid
                     new_conn.execute(
-                        """
-                        INSERT OR REPLACE INTO telegram_files (
-                            bot_id, file_unique_id, file_id, job_id, video_id
-                        ) VALUES (0, ?, ?, ?, ?)
-                        """,
-                        (item["telegram_file_id"], item["telegram_file_id"], job_id, video_id),
+                        "INSERT OR IGNORE INTO video_tags (video_id, tag_id, source, evidence, created_at) VALUES (?, ?, 'telegram', '', ?)",
+                        (video_id, tid, now_ms),
                     )
 
             migrated_count += 1
