@@ -4442,3 +4442,90 @@ func TestHandleRegenFailedPreviewsInvokesHookWithDriveID(t *testing.T) {
 		t.Fatalf("hook called with %q, want PikPak", calledWith)
 	}
 }
+
+func TestHandleAdminListVideosFiltersByMediaType(t *testing.T) {
+	ctx := context.Background()
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := cat.Close(); err != nil {
+			t.Fatalf("close catalog: %v", err)
+		}
+	})
+
+	now := time.Now()
+	for _, video := range []*catalog.Video{
+		{
+			ID:          "sample-video",
+			DriveID:     "local-upload",
+			FileID:      "sample.mp4",
+			Ext:         "mp4",
+			Title:       "Sample MP4 Video",
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+		{
+			ID:          "sample-photo",
+			DriveID:     "local-upload",
+			FileID:      "sample.jpg",
+			Ext:         "jpg",
+			Title:       "Sample JPG Photo",
+			PublishedAt: now.Add(-time.Second),
+			CreatedAt:   now.Add(-time.Second),
+		},
+	} {
+		if err := cat.UpsertVideo(ctx, video); err != nil {
+			t.Fatalf("seed video %s: %v", video.ID, err)
+		}
+	}
+
+	server := &AdminServer{Catalog: cat}
+
+	fetchMedia := func(mediaType string) ([]catalog.Video, int) {
+		url := "/admin/api/videos"
+		if mediaType != "" {
+			url += "?mediaType=" + mediaType
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		rr := httptest.NewRecorder()
+		server.handleAdminListVideos(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+		}
+		var got struct {
+			Items []catalog.Video `json:"items"`
+			Total int             `json:"total"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return got.Items, got.Total
+	}
+
+	// 1. mediaType=video -> only sample-video
+	vItems, vTotal := fetchMedia("video")
+	if vTotal != 1 || len(vItems) != 1 || vItems[0].ID != "sample-video" {
+		t.Fatalf("video filter = total:%d items:%+v, want 1 sample-video", vTotal, vItems)
+	}
+
+	// 2. mediaType=image -> only sample-photo
+	pItems, pTotal := fetchMedia("image")
+	if pTotal != 1 || len(pItems) != 1 || pItems[0].ID != "sample-photo" {
+		t.Fatalf("image filter = total:%d items:%+v, want 1 sample-photo", pTotal, pItems)
+	}
+
+	// 3. mediaType=all -> both
+	allIt, allTot := fetchMedia("all")
+	if allTot != 2 || len(allIt) != 2 {
+		t.Fatalf("all filter = total:%d items:%+v, want 2 items", allTot, allIt)
+	}
+
+	// 4. mediaType="" -> both
+	defIt, defTot := fetchMedia("")
+	if defTot != 2 || len(defIt) != 2 {
+		t.Fatalf("default filter = total:%d items:%+v, want 2 items", defTot, defIt)
+	}
+}
+
