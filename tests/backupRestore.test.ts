@@ -148,7 +148,6 @@ test("backup creation uses credential-neutral backup wording", () => {
 test("backup creation lets administrators choose a durable backup scope", () => {
   assert.match(page, /title="选择备份内容"/);
   for (const label of [
-    "网盘凭证和对应视频资源",
     "爬虫脚本和对应的视频资源",
     "上传存储和对应视频资源",
     "本地存储和对应的视频资源",

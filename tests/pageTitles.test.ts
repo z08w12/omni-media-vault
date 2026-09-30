@@ -83,9 +83,9 @@ test("admin route changes retain bounded page lifecycles", () => {
 });
 
 test("admin route cache is limited to known top-level pages", () => {
-  assert.equal(getAdminRouteCacheKey("/admin/drives"), "/admin/drives");
-  assert.equal(getAdminRouteCacheKey("/admin/drives/"), "/admin/drives");
-  assert.equal(getAdminRouteCacheKey("/admin/drives/detail"), "/admin/drives");
+  assert.equal(getAdminRouteCacheKey("/admin/crawlers"), "/admin/crawlers");
+  assert.equal(getAdminRouteCacheKey("/admin/crawlers/"), "/admin/crawlers");
+  assert.equal(getAdminRouteCacheKey("/admin/crawlers/detail"), "/admin/crawlers");
   assert.equal(getAdminRouteCacheKey("/admin/logs"), "/admin/logs");
   assert.equal(getAdminRouteCacheKey("/admin"), null);
   assert.equal(getAdminRouteCacheKey("/admin/unknown"), null);
@@ -95,7 +95,6 @@ test("every admin page has a centralized title", () => {
   assert.deepEqual(
     ADMIN_PAGE_TITLES.map(({ path, title }) => [path, title]),
     [
-      ["/admin/drives", "网盘管理"],
       ["/admin/crawlers", "爬虫管理"],
       ["/admin/videos", "媒体管理"],
       ["/admin/tags", "标签管理"],
@@ -103,7 +102,7 @@ test("every admin page has a centralized title", () => {
       ["/admin/backup", "备份恢复"],
       ["/admin/logs", "日志查看"],
       ["/admin/telegram", "Telegram"],
-    ["/admin/settings", "配置面板"],
+      ["/admin/settings", "配置面板"],
     ]
   );
 
@@ -115,10 +114,8 @@ test("every admin page has a centralized title", () => {
   assert.equal(getAdminPageTitle("/admin/unknown"), DEFAULT_ADMIN_PAGE_TITLE);
 });
 
-test("drive details omit the shared admin page header", () => {
-  assert.equal(shouldShowAdminPageHeader("/admin/drives", ""), true);
-  assert.equal(shouldShowAdminPageHeader("/admin/drives/", "?filter=active"), true);
-  assert.equal(shouldShowAdminPageHeader("/admin/drives", "?drive=115"), false);
-  assert.equal(shouldShowAdminPageHeader("/admin/drives", "?drive=%20%20"), true);
-  assert.equal(shouldShowAdminPageHeader("/admin/videos", "?drive=115"), true);
+test("admin pages display the shared admin page header", () => {
+  assert.equal(shouldShowAdminPageHeader("/admin/crawlers", ""), true);
+  assert.equal(shouldShowAdminPageHeader("/admin/crawlers/", "?filter=active"), true);
+  assert.equal(shouldShowAdminPageHeader("/admin/videos", "?crawler=1"), true);
 });

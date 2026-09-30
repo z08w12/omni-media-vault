@@ -13,7 +13,6 @@ const floatingActionHookSource = readFileSync(
   "utf8"
 );
 const actionPageSources = [
-  "DrivesPage.tsx",
   "CrawlersPage.tsx",
   "CrawlersPageLoading.tsx",
   "VideosPage.tsx",
@@ -21,8 +20,8 @@ const actionPageSources = [
   "SettingsPage.tsx",
   "UsersPage.tsx",
 ].map((file) => readFileSync(new URL(`../src/admin/${file}`, import.meta.url), "utf8"));
-const tagsPageSource = actionPageSources[4];
-const videosPageSource = actionPageSources[3];
+const tagsPageSource = actionPageSources[3];
+const videosPageSource = actionPageSources[2];
 
 test("admin shell follows CPA desktop-content and mobile-document scrolling", () => {
   assert.match(

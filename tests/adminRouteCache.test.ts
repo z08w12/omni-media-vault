@@ -12,7 +12,6 @@ const pagePreloadSource = source("admin/adminPagePreload.ts");
 const appSource = source("App.tsx");
 const layoutSource = source("admin/AdminLayout.tsx");
 const modalSource = source("admin/Modal.tsx");
-const drivesSource = source("admin/DrivesPage.tsx");
 const crawlersSource = source("admin/CrawlersPage.tsx");
 const videosSource = source("admin/VideosPage.tsx");
 const tagsSource = source("admin/TagsPage.tsx");
@@ -42,7 +41,6 @@ test("retained pages revalidate silently when they become active again", () => {
   );
 
   for (const pageSource of [
-    drivesSource,
     crawlersSource,
     videosSource,
     tagsSource,
@@ -62,7 +60,6 @@ test("retained pages revalidate silently when they become active again", () => {
 });
 
 test("hidden pages suspend recurring and out-of-tree UI work", () => {
-  assert.match(drivesSource, /if \(!routeActive\) return;[\s\S]*?setInterval/);
   assert.match(crawlersSource, /if \(!routeActive \|\| !anyBusy\) return/);
   assert.match(videosSource, /if \(!routeActive \|\| \(trackedRegenCount === 0/);
   assert.match(logsSource, /autoRefresh: autoRefresh && routeActive/);
@@ -82,7 +79,7 @@ test("remaining admin page modules preload sequentially during idle time", () =>
   );
   assert.match(pagePreloadSource, /activeModule\?\.load\(\) \?\? Promise\.resolve\(\)/);
   assert.match(pageModulesSource, /reusableModuleLoader/);
-  assert.match(appSource, /loadDrivesPage\(\)\.then/);
+  assert.match(appSource, /loadCrawlersPage\(\)\.then/);
   assert.match(appSource, /loadSettingsPage\(\)\.then/);
   assert.doesNotMatch(layoutSource, /onMouseEnter|onPointerEnter|onFocus=/);
 });

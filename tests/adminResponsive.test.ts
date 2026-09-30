@@ -46,14 +46,7 @@ const crawlersPageLoadingSource = readFileSync(
   new URL("../src/admin/CrawlersPageLoading.tsx", import.meta.url),
   "utf8"
 );
-const drivesPageSource = readFileSync(
-  new URL("../src/admin/DrivesPage.tsx", import.meta.url),
-  "utf8"
-);
-const drivesPageLoadingSource = readFileSync(
-  new URL("../src/admin/DrivesPageLoading.tsx", import.meta.url),
-  "utf8"
-);
+
 const apiSource = readFileSync(
   new URL("../src/admin/api.ts", import.meta.url),
   "utf8"
@@ -124,11 +117,6 @@ test("admin password fields use shared PasswordInput with eye toggle", () => {
     new URL("../src/admin/LoginPage.tsx", import.meta.url),
     "utf8"
   );
-  const driveFormSource = readFileSync(
-    new URL("../src/admin/drive/DriveForm.tsx", import.meta.url),
-    "utf8"
-  );
-
   assert.match(passwordInputSource, /from "lucide-react"/);
   assert.match(passwordInputSource, /EyeOff/);
   assert.match(passwordInputSource, /type=\{visible \? "text" : "password"\}/);
@@ -137,11 +125,7 @@ test("admin password fields use shared PasswordInput with eye toggle", () => {
   assert.match(loginPageSource, /<PasswordInput[\s\S]*?id="admin-login-password"/);
   assert.match(loginPageSource, /<PasswordInput[\s\S]*?id="admin-login-password-confirm"/);
   assert.doesNotMatch(loginPageSource, /type="password"/);
-  assert.match(driveFormSource, /import \{ PasswordInput \} from "\.\.\/PasswordInput"/);
-  assert.match(driveFormSource, /isSecretCredential\(f\.key\) \? \(/);
-  assert.match(driveFormSource, /<PasswordInput[\s\S]*?id=\{`\$\{idPrefix\}-credential-\$\{f\.key\}`\}/);
   assert.doesNotMatch(usersPageSource, /type="password"/);
-  assert.doesNotMatch(driveFormSource, /type="password"/);
 });
 
 test("admin tables scroll inside the mobile viewport", () => {
@@ -362,7 +346,6 @@ test("admin video management separates source navigation from the modal advanced
   assert.match(videosPageSource, /function VideoSourceNavigation/);
   assert.match(videosPageSource, /aria-label="视频来源筛选"/);
   assert.match(videosPageSource, /label: "本地存储"/);
-  assert.match(videosPageSource, /`drive:\$\{drive\.id\}`/);
   assert.match(videosPageSource, /`crawler:\$\{crawler\.id\}`/);
   assert.match(videosPageSource, />黑名单管理<\/span>/);
   assert.doesNotMatch(videosPageSource, /function VideoSourcePicker|<span>来源<\/span>/);
@@ -1254,37 +1237,7 @@ test("admin loading spinner rotates around icon center", () => {
   assert.doesNotMatch(crawlersPageSource, /AdminLoading/);
   assert.match(crawlersPageSource, /<CrawlerListSkeleton \/>/);
   assert.doesNotMatch(videosPageSource, /AdminLoading/);
-  assert.equal(
-    Array.from(drivesPageSource.matchAll(/<AdminLoading \/>/g)).length,
-    0
-  );
   assert.match(adminCss, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.admin-spin\s*\{\s*animation-duration\s*:\s*0\.9s\s*!important/s);
-});
-
-test("drive list loading uses a local card-grid skeleton", () => {
-  const skeleton = ruleBody(adminCss, ".admin-drive-card-skeleton");
-  const skeletonSurface = ruleBody(adminCss, ".admin-card-skeleton-surface");
-
-  assert.match(drivesPageLoadingSource, /const DRIVE_LIST_SKELETON_COUNT = 6/);
-  assert.match(
-    drivesPageLoadingSource,
-    /className="admin-drives-grid admin-drives-grid--skeleton"[\s\S]*?aria-busy="true"[\s\S]*?admin-drive-card-skeleton admin-card-skeleton-surface/
-  );
-  assert.match(
-    drivesPageSource,
-    /\{loading \? \(\s*<DriveListSkeleton \/>\s*\) : loadError/
-  );
-  assert.match(skeleton, /height\s*:\s*230px/);
-  assert.match(skeleton, /border-radius\s*:\s*var\(--radius-md\)/);
-  assert.match(skeletonSurface, /background\s*:\s*linear-gradient/);
-  assert.match(
-    skeletonSurface,
-    /animation\s*:\s*admin-card-skeleton-shimmer 1\.5s ease-in-out infinite/
-  );
-  assert.match(
-    adminCss,
-    /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.admin-card-skeleton-surface\s*\{\s*animation\s*:\s*none/s
-  );
 });
 
 test("crawler loading keeps the real page structure and skeletonizes only crawler cards", () => {
@@ -1312,41 +1265,6 @@ test("crawler loading keeps the real page structure and skeletonizes only crawle
   assert.match(skeleton, /border\s*:\s*1px solid var\(--border-subtle\)/);
   assert.match(skeleton, /border-radius\s*:\s*var\(--radius-sm\)/);
   assert.match(sharedSurface, /background\s*:\s*linear-gradient/);
-});
-
-test("drive detail loading renders the real page shell without animated placeholders", () => {
-  const detailLoadingStart = drivesPageLoadingSource.indexOf(
-    "export function DriveDetailLoading"
-  );
-  const routeLoadingStart = drivesPageLoadingSource.indexOf(
-    "export function DrivesPageLoading"
-  );
-  const detailLoadingSource = drivesPageLoadingSource.slice(
-    detailLoadingStart,
-    routeLoadingStart
-  );
-
-  assert.ok(detailLoadingStart > -1);
-  assert.match(
-    detailLoadingSource,
-    /className="admin-drive-detail-layout admin-drive-detail-loading"[\s\S]*?aria-busy="true"/
-  );
-  assert.match(detailLoadingSource, /正在加载网盘详情/);
-  assert.match(drivesPageLoadingSource, /searchParams\.get\("drive"\)/);
-  for (const label of ["基本信息", "扫描跳过目录", "生成状态", "本地存储占用"]) {
-    assert.match(detailLoadingSource, new RegExp(label));
-  }
-  assert.match(detailLoadingSource, /className="admin-detail-card"/);
-  assert.match(detailLoadingSource, /className="admin-gen-columns"/);
-  assert.match(detailLoadingSource, /className="admin-local-storage-metrics"/);
-  assert.doesNotMatch(detailLoadingSource, /toggle-switch/);
-  assert.doesNotMatch(detailLoadingSource, /className="admin-status"/);
-  assert.doesNotMatch(detailLoadingSource, /admin-card-skeleton-surface/);
-  assert.doesNotMatch(detailLoadingSource, /admin-drive-detail-skeleton__card/);
-  assert.match(
-    drivesPageSource,
-    /import \{ DriveDetailLoading, DriveListSkeleton \} from "\.\/DrivesPageLoading";/
-  );
 });
 
 test("mobile video management uses compact theme-aware video cards", () => {

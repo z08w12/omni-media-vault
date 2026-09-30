@@ -79,10 +79,6 @@ test("normal videos keep source navigation separate from composable advanced fil
   assert.match(sourceNavigationSource, /if \(sourceCatalogLoaded\) \{[\s\S]*?sourceItems\.push\(/);
   assert.match(sourceNavigationSource, /\.\.\.\(hasLocalUploads[\s\S]*?label: "本地存储",[\s\S]*?upload: true,[\s\S]*?: \[\]\)/);
   assert.ok(
-    sourceNavigationSource.indexOf("...drives") <
-      sourceNavigationSource.indexOf('label: "本地存储"')
-  );
-  assert.ok(
     sourceNavigationSource.indexOf('label: "本地存储"') <
       sourceNavigationSource.indexOf("...crawlers")
   );
@@ -92,9 +88,7 @@ test("normal videos keep source navigation separate from composable advanced fil
   assert.match(sourceNavigationSource, /<LocalStorageIcon size=\{15\} className="admin-video-source-tab__glyph is-upload" \/>/);
   assert.match(filterAllIconSource, /<rect x="3\.5" y="3\.5" width="5" height="5" rx="1\.4" \/>/);
   assert.match(filterAllIconSource, /<circle cx="12" cy="12" r="1\.6" fill="currentColor" stroke="none" \/>/);
-  assert.match(sourceNavigationSource, /`drive:\$\{drive\.id\}`/);
   assert.match(sourceNavigationSource, /`crawler:\$\{crawler\.id\}`/);
-  assert.match(sourceNavigationSource, /driveKindIconPath\(drive\.kind\)/);
   assert.match(videosPageSource, /import \{ SpiderIcon \} from "\.\/icons\/SpiderIcon";/);
   assert.match(sourceNavigationSource, /<SpiderIcon size=\{16\} className="admin-video-source-tab__glyph is-crawler" \/>/);
   assert.doesNotMatch(sourceNavigationSource, /admin-video-source-tab__icon is-(?:all|upload|crawler)/);
@@ -135,7 +129,8 @@ test("normal videos keep source navigation separate from composable advanced fil
   );
   assert.match(videosPageSource, /function openNativeDatePicker\(input: HTMLInputElement\)[\s\S]*?input\.showPicker\(\)/);
   assert.doesNotMatch(videosPageSource, /视频时间|publishedFrom|publishedTo/);
-  assert.match(videosPageSource, /Promise\.allSettled\(\[[\s\S]*?api\.listDrives\(\),[\s\S]*?api\.listCrawlers\(\),[\s\S]*?api\.listVideos\(\{ driveId: LOCAL_UPLOAD_SOURCE_ID, page: 1, size: 1 \}\),[\s\S]*?\]\)/);
+  assert.match(videosPageSource, /Promise\.allSettled\(\[\s*api\.listCrawlers\(\),\s*api\.listVideos\(\{ driveId: LOCAL_UPLOAD_SOURCE_ID, page: 1, size: 1 \}\),[\s\S]*?\]\)/);
+  assert.doesNotMatch(videosPageSource, /api\.listDrives\(/);
   assert.match(videosPageSource, /void api\.listTags\(\)/);
   assert.match(videosPageSource, /setAppliedFilters\(\{ \.\.\.draftFilters \}\)/);
   assert.match(clearFiltersSource, /setDraftFilters\(\{ \.\.\.EMPTY_VIDEO_FILTERS \}\)/);
