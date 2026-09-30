@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/video-site/backend/internal/catalog"
@@ -92,24 +93,41 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 		}
 		monitorCtx, cancelMonitor := context.WithCancel(ctx)
 		defer cancelMonitor()
+		var (
+			progressMu sync.Mutex
+			maxDone    int64
+			curTotal   int64
+		)
+		updateProgress := func(done, total int64) {
+			progressMu.Lock()
+			if done > maxDone {
+				maxDone = done
+			}
+			if total > 0 {
+				curTotal = total
+			}
+			d, t := maxDone, curTotal
+			progressMu.Unlock()
+			_ = progress("x_download", d, t)
+		}
 		go func() {
 			ticker := time.NewTicker(time.Second)
 			defer ticker.Stop()
-			var lastBytes int64
 			for {
 				select {
 				case <-monitorCtx.Done():
 					return
 				case <-ticker.C:
 					bytes := findDirectoryBytes(tempJobDir)
-					if bytes > 0 && bytes > lastBytes {
-						lastBytes = bytes
-						_ = progress("x_download", bytes, 0)
+					if bytes > 0 {
+						updateProgress(bytes, 0)
 					}
 				}
 			}
 		}()
-		videos, err := ytdlp.DownloadXPost(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes)
+		videos, err := ytdlp.DownloadXPostWithProgress(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
+			updateProgress(done, total)
+		})
 		cancelMonitor()
 		if err != nil {
 			return out, &mediaimport.SourceError{Message: err.Error()}

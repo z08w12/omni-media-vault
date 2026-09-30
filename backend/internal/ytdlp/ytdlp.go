@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -117,6 +119,11 @@ type ytdlpJSON struct {
 
 // DownloadXPost downloads the video from the public X/Twitter post into jobDir.
 func DownloadXPost(ctx context.Context, postURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
+	return DownloadXPostWithProgress(ctx, postURL, jobDir, maxSizeBytes, nil)
+}
+
+// DownloadXPostWithProgress downloads the video and reports live progress if available.
+func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxSizeBytes int64, onProgress func(done, total int64)) ([]DownloadedVideo, error) {
 	if err := os.MkdirAll(jobDir, 0750); err != nil {
 		return nil, fmt.Errorf("创建下载目录失败: %w", err)
 	}
@@ -132,6 +139,9 @@ func DownloadXPost(ctx context.Context, postURL, jobDir string, maxSizeBytes int
 		"--socket-timeout", "25",
 		"--retries", "3",
 		"--fragment-retries", "3",
+		"--newline",
+		"--progress-delta", "1",
+		"--progress-template", "download:%(progress.downloaded_bytes)s/%(progress.total_bytes)s/%(progress.total_bytes_estimate)s",
 		"--print-json",
 	}
 	if maxSizeBytes > 0 {
@@ -140,23 +150,51 @@ func DownloadXPost(ctx context.Context, postURL, jobDir string, maxSizeBytes int
 	args = append(args, postURL)
 
 	cmd := exec.CommandContext(ctx, bin, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("创建下载输出流失败: %w", err)
+	}
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("启动下载器失败: %w", err)
+	}
+
+	var stdoutBuf bytes.Buffer
+	scanner := bufio.NewScanner(stdoutPipe)
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "download:") {
+			parts := strings.Split(strings.TrimPrefix(trimmed, "download:"), "/")
+			if len(parts) >= 2 {
+				done, _ := strconv.ParseInt(parts[0], 10, 64)
+				total, _ := strconv.ParseInt(parts[1], 10, 64)
+				if total <= 0 && len(parts) >= 3 {
+					total, _ = strconv.ParseInt(parts[2], 10, 64)
+				}
+				if done > 0 && onProgress != nil {
+					onProgress(done, total)
+				}
+			}
+			continue
+		}
+		stdoutBuf.WriteString(line + "\n")
+	}
+
+	if err := cmd.Wait(); err != nil {
 		errStr := strings.TrimSpace(stderr.String())
 		if errStr == "" {
 			errStr = err.Error()
 		}
-		// Clean up error message
 		errStr = strings.TrimPrefix(errStr, "ERROR: ")
 		return nil, fmt.Errorf("下载 X 视频失败: %s", errStr)
 	}
 
-	// Parse JSON lines from stdout
+	// Parse JSON lines from stdoutBuf
 	var entries []ytdlpJSON
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for _, line := range strings.Split(stdoutBuf.String(), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || !strings.HasPrefix(line, "{") {
 			continue
