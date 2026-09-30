@@ -57,8 +57,8 @@ func TestReceiptsDeduplicateAndRecoverCursor(t *testing.T) {
 	if err != nil || len(jobs) != 1 {
 		t.Fatalf("jobs=%v err=%v", jobs, err)
 	}
-	if len(jobs[0].Tags) != 0 {
-		t.Fatalf("Telegram task must leave content tags to automatic matching: %v", jobs[0].Tags)
+	if len(jobs[0].Tags) != 1 || jobs[0].Tags[0] != catalog.TelegramTagLabel {
+		t.Fatalf("Telegram task tags: %v", jobs[0].Tags)
 	}
 	off, _, err := cat.TelegramOffset(ctx, 123)
 	if err != nil || off != 4 {

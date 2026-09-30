@@ -54,7 +54,7 @@ func TestProgressNotificationEditsOriginalAndSkipsUnchangedContent(t *testing.T)
 	c := &client{base: server.URL, token: "123:token", http: server.Client()}
 	s.notifyOne(ctx, c, r)
 	first := <-sent
-	if first.method != "sendMessage" || !strings.Contains(first.text, "已加入队列") {
+	if first.method != "sendMessage" || !strings.Contains(first.text, "已加入转存队列") {
 		t.Fatalf("first notification=%+v", first)
 	}
 	if err := cat.TransitionRemoteUploadJob(ctx, r.JobID, catalog.RemoteUploadQueued, catalog.RemoteUploadDownloading); err != nil {
@@ -69,7 +69,7 @@ func TestProgressNotificationEditsOriginalAndSkipsUnchangedContent(t *testing.T)
 	r.ReplyID = 51
 	s.notifyOne(ctx, c, r)
 	progress := <-sent
-	if progress.method != "editMessageText" || progress.id != 51 || !strings.Contains(progress.text, "正在从 TG 获取") || strings.Contains(progress.text, "%") {
+	if progress.method != "editMessageText" || progress.id != 51 || !strings.Contains(progress.text, "正在转存：50%") {
 		t.Fatalf("progress notification=%+v", progress)
 	}
 	if pending, err := cat.PendingTelegramReceipts(ctx, 123); err != nil || len(pending) != 0 {
@@ -171,23 +171,22 @@ func TestDeletedNotificationIsResentWithFormattingAndReplyContext(t *testing.T) 
 
 func TestImportProgressReflectsMeasuredStage(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		job       catalog.RemoteUploadJob
-		want      string
-		noPercent bool
+		name string
+		job  catalog.RemoteUploadJob
+		want string
 	}{
-		{"fetch", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 50, TotalBytes: 100}, "正在从 TG 获取", true},
-		{"unknown size", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 1024}, "正在从 TG 获取", true},
-		{"download complete", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 100, TotalBytes: 100}, "正在从 TG 获取", true},
-		{"validating", catalog.RemoteUploadJob{State: "validating"}, "正在校验", true},
-		{"saving", catalog.RemoteUploadJob{State: "saving"}, "正在入库", true},
-		{"retry", catalog.RemoteUploadJob{State: "queued", Stage: "retry_wait"}, "等待重试", true},
-		{"cancel", catalog.RemoteUploadJob{State: "downloading", CancelRequested: true}, "正在取消", true},
+		{"fetch", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 50, TotalBytes: 100}, "正在转存：50%"},
+		{"unknown size", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 1024 * 1024}, "正在转存：(1.0 MB)"},
+		{"download complete", catalog.RemoteUploadJob{State: "downloading", Stage: "telegram_download", BytesDownloaded: 100, TotalBytes: 100}, "正在转存：100%"},
+		{"validating", catalog.RemoteUploadJob{State: "validating"}, "正在校验视频"},
+		{"saving", catalog.RemoteUploadJob{State: "saving"}, "正在入库"},
+		{"retry", catalog.RemoteUploadJob{State: "queued", Stage: "retry_wait"}, "等待重试保存"},
+		{"cancel", catalog.RemoteUploadJob{State: "downloading", CancelRequested: true}, "正在取消保存"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := importProgressText(&tc.job)
-			if !strings.Contains(got, tc.want) || (tc.noPercent && strings.Contains(got, "%")) {
-				t.Fatalf("unexpected progress %q", got)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("unexpected progress %q, want %q", got, tc.want)
 			}
 		})
 	}

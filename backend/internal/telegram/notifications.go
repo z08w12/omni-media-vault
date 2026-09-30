@@ -46,9 +46,21 @@ func (s *Service) notifyOne(ctx context.Context, c *client, r catalog.TelegramRe
 		message = renderImportMessage(j, s.cfg.SiteBaseURL)
 		state = j.State
 		if !j.Terminal() {
+			s.progressEditsMu.Lock()
+			lastEdit, exists := s.progressEdits[r.JobID]
+			if exists && time.Since(lastEdit) < 3*time.Second {
+				s.progressEditsMu.Unlock()
+				return
+			}
+			s.progressEditsMu.Unlock()
+
 			// Persist the rendered content identity so restarts and unchanged
 			// progress do not cause duplicate edits.
 			state = fmt.Sprintf("progress:%x", sha256.Sum256([]byte(message.text)))
+		} else {
+			s.progressEditsMu.Lock()
+			delete(s.progressEdits, r.JobID)
+			s.progressEditsMu.Unlock()
 		}
 	} else if r.Response == responseStatus {
 		message = renderReceiptMessage(catalog.TelegramReceipt{Response: responseNeedsAccess, SenderID: r.SenderID})
@@ -104,6 +116,11 @@ func (s *Service) notifyOne(ctx context.Context, c *client, r catalog.TelegramRe
 		}
 		_ = s.cat.SaveTelegramNotification(ctx, r, 0, "", delay)
 		return
+	}
+	if r.JobID != "" {
+		s.progressEditsMu.Lock()
+		s.progressEdits[r.JobID] = time.Now()
+		s.progressEditsMu.Unlock()
 	}
 	if response.ID == 0 {
 		response.ID = r.ReplyID

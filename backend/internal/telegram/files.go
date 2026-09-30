@@ -90,7 +90,27 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 		if err = progress("x_download", 0, 0); err != nil {
 			return out, err
 		}
+		monitorCtx, cancelMonitor := context.WithCancel(ctx)
+		defer cancelMonitor()
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			var lastBytes int64
+			for {
+				select {
+				case <-monitorCtx.Done():
+					return
+				case <-ticker.C:
+					bytes := findDirectoryBytes(tempJobDir)
+					if bytes > 0 && bytes > lastBytes {
+						lastBytes = bytes
+						_ = progress("x_download", bytes, 0)
+					}
+				}
+			}
+		}()
 		videos, err := ytdlp.DownloadXPost(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes)
+		cancelMonitor()
 		if err != nil {
 			return out, &mediaimport.SourceError{Message: err.Error()}
 		}
@@ -98,6 +118,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			return out, &mediaimport.SourceError{Message: "未在 X 帖子中检测到视频"}
 		}
 		v := videos[0]
+		_ = progress("x_download", v.Size, v.Size)
 		if err := os.Rename(v.Path, destination); err != nil {
 			data, readErr := os.ReadFile(v.Path)
 			if readErr != nil {
@@ -137,11 +158,35 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.FetchTimeoutSeconds)*time.Second)
 	defer cancel()
+
+	downloadStart := time.Now()
+	monitorCtx, cancelMonitor := context.WithCancel(fetchCtx)
+	defer cancelMonitor()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		var lastBytes int64
+		for {
+			select {
+			case <-monitorCtx.Done():
+				return
+			case <-ticker.C:
+				bytes := findActiveDownloadBytes(s.cfg.LocalFilesRoot, source.Size, downloadStart)
+				if bytes > 0 && bytes > lastBytes {
+					lastBytes = bytes
+					_ = progress("telegram_download", bytes, source.Size)
+				}
+			}
+		}
+	}()
+
 	var file struct {
 		Path string `json:"file_path"`
 		Size int64  `json:"file_size"`
 	}
-	if err = c.call(fetchCtx, "getFile", map[string]string{"file_id": fileID}, &file); err != nil {
+	err = c.call(fetchCtx, "getFile", map[string]string{"file_id": fileID}, &file)
+	cancelMonitor()
+	if err != nil {
 		if ctx.Err() != nil {
 			return out, ctx.Err()
 		}
@@ -240,4 +285,64 @@ func acquiredFile(source catalog.TelegramSource, local catalog.TelegramLocalFile
 }
 func (s *Service) Discard(ctx context.Context, j *catalog.RemoteUploadJob) error {
 	return telegramstorage.New(s.cat, func() string { return s.cfg.LocalFilesRoot }).Remove(ctx, j.ID+".media")
+}
+
+func findActiveDownloadBytes(root string, expectedSize int64, startedAt time.Time) int64 {
+	if root == "" {
+		return 0
+	}
+	var bestSize int64
+	var bestModTime time.Time
+
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == "library" || name == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := info.Name()
+		if strings.HasSuffix(name, ".binlog") || strings.HasSuffix(name, ".lock") {
+			return nil
+		}
+		size := info.Size()
+		if size <= 0 {
+			return nil
+		}
+		if expectedSize > 0 && size > expectedSize {
+			return nil
+		}
+		modTime := info.ModTime()
+		if modTime.Before(startedAt.Add(-5*time.Second)) || time.Since(modTime) > 30*time.Second {
+			return nil
+		}
+		if modTime.After(bestModTime.Add(time.Second)) {
+			bestModTime = modTime
+			bestSize = size
+		} else if modTime.After(bestModTime.Add(-time.Second)) {
+			if size > bestSize {
+				bestModTime = modTime
+				bestSize = size
+			}
+		}
+		return nil
+	})
+
+	return bestSize
+}
+
+func findDirectoryBytes(dir string) int64 {
+	var total int64
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	return total
 }

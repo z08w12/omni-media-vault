@@ -97,8 +97,20 @@ func importProgressText(j *catalog.RemoteUploadJob) string {
 	}
 	switch j.State {
 	case catalog.RemoteUploadDownloading:
-		// Bot API file acquisition does not expose live download progress.
-		return "正在从 TG 获取视频"
+		if j.TotalBytes > 0 {
+			percent := int(j.BytesDownloaded * 100 / j.TotalBytes)
+			if percent > 100 {
+				percent = 100
+			}
+			curMB := float64(j.BytesDownloaded) / (1024 * 1024)
+			totMB := float64(j.TotalBytes) / (1024 * 1024)
+			return fmt.Sprintf("正在转存：%d%% (%.1f MB / %.1f MB)", percent, curMB, totMB)
+		}
+		if j.BytesDownloaded > 0 {
+			curMB := float64(j.BytesDownloaded) / (1024 * 1024)
+			return fmt.Sprintf("正在转存：(%.1f MB)", curMB)
+		}
+		return "正在转存…"
 	case catalog.RemoteUploadValidating:
 		return "正在校验视频"
 	case catalog.RemoteUploadSaving:
@@ -107,8 +119,9 @@ func importProgressText(j *catalog.RemoteUploadJob) string {
 		if j.Stage == "retry_wait" {
 			return "等待重试保存"
 		}
+		return "已加入转存队列…"
 	}
-	return "已加入队列"
+	return "已加入转存队列…"
 }
 
 // Bound dynamic fields before escaping, keeping messages short and HTML intact.

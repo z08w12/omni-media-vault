@@ -50,13 +50,23 @@ type Service struct {
 	mediaGroupsReady bool
 	status           Status
 	client           *client
+	progressEditsMu  sync.Mutex
+	progressEdits    map[string]time.Time
 	botID            int64
 	wg               sync.WaitGroup
 	cancel           context.CancelFunc
 }
 
 func New(cfg config.Telegram, token string, cat *catalog.Catalog, uploadDir string, reserve int64) *Service {
-	return &Service{cfg: cfg, token: token, cat: cat, uploadDir: uploadDir, reserve: reserve, status: Status{Enabled: cfg.Enabled, State: "disabled", Config: cfg}}
+	return &Service{
+		cfg:           cfg,
+		token:         token,
+		cat:           cat,
+		uploadDir:     uploadDir,
+		reserve:       reserve,
+		status:        Status{Enabled: cfg.Enabled, State: "disabled", Config: cfg},
+		progressEdits: make(map[string]time.Time),
+	}
 }
 func (s *Service) SetWake(wake func()) { s.mu.Lock(); s.wakeImports = wake; s.mu.Unlock() }
 

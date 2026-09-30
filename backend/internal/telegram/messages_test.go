@@ -50,8 +50,8 @@ func TestImportMessagesKeepStatusTitleAndActionsDistinct(t *testing.T) {
 		wantTask       bool
 		wantLink       bool
 	}{
-		{catalog.RemoteUploadQueued, "已加入队列", false, false},
-		{catalog.RemoteUploadDownloading, "正在从 TG 获取视频", false, false},
+		{catalog.RemoteUploadQueued, "已加入转存队列…", false, false},
+		{catalog.RemoteUploadDownloading, "正在转存：50% (0.0 MB / 0.0 MB)", false, false},
 		{catalog.RemoteUploadValidating, "正在校验视频", false, false},
 		{catalog.RemoteUploadSaving, "正在入库", false, false},
 		{catalog.RemoteUploadCompleted, "已保存", false, true},
@@ -69,8 +69,11 @@ func TestImportMessagesKeepStatusTitleAndActionsDistinct(t *testing.T) {
 			if !strings.Contains(message.text, "<b>"+tc.heading+"</b>\n海边 &amp; &lt;日落&gt; 第二行") {
 				t.Fatalf("status and title are not separated or escaped: %s", message.text)
 			}
-			if strings.Contains(plain, "原始标题") || strings.Contains(plain, "%") {
-				t.Fatalf("wrong title or unmeasured progress: %s", plain)
+			if strings.Contains(plain, "原始标题") {
+				t.Fatalf("wrong title: %s", plain)
+			}
+			if tc.state == catalog.RemoteUploadDownloading && !strings.Contains(plain, "50%") {
+				t.Fatalf("missing progress percentage: %s", plain)
 			}
 			if strings.Contains(message.text, "<code>tg-task</code>") != tc.wantTask {
 				t.Fatalf("task ID visibility: %s", message.text)
@@ -130,17 +133,17 @@ func TestCommandsAndMediaHintsRespectAccess(t *testing.T) {
 		userID                  int64
 		want                    string
 	}{
-		{"start", "/start", "private", 42, "保存视频到91"},
-		{"help", "/help", "private", 42, "视频附带的第一行文字"},
-		{"addressed help", "/help@test_bot", "private", 42, "保存视频到91"},
-		{"start argument", "/start welcome", "private", 42, "保存视频到91"},
+		{"start", "/start", "private", 42, "保存媒体到 91"},
+		{"help", "/help", "private", 42, "媒体附带的第一行文字"},
+		{"addressed help", "/help@test_bot", "private", 42, "保存媒体到 91"},
+		{"start argument", "/start welcome", "private", 42, "保存媒体到 91"},
 		{"id", "/id", "private", 42, "<code>42</code>"},
 		{"bootstrap id", "/id@test_bot", "private", 99, "<code>99</code>"},
 		{"unauthorized start", "/start", "private", 99, "需要开通权限"},
 		{"unauthorized help", "/help", "private", 99, "需要开通权限"},
 		{"unauthorized status", "/status", "private", 99, "需要开通权限"},
-		{"unsupported", "https://t.me/example/1", "private", 42, "请发送视频"},
-		{"unknown command", "/unknown", "private", 42, "请发送视频"},
+		{"unsupported", "https://t.me/example/1", "private", 42, "请发送视频、图片"},
+		{"unknown command", "/unknown", "private", 42, "请发送视频、图片"},
 		{"unauthorized media", "", "private", 99, ""},
 		{"group id", "/id", "group", 42, ""},
 		{"group help", "/help", "group", 42, ""},
