@@ -78,3 +78,13 @@ func TestTelegramSourceTagCoexistsWithContentTags(t *testing.T) {
 		})
 	}
 }
+
+func TestTelegramImportWithNewManualTag(t *testing.T) {
+	c := telegramTestCatalog(t)
+	// "brand-new-custom-tag" is never created beforehand
+	v := finalizeTaggedImport(t, c, "tg-new-tag", "telegram", []string{"brand-new-custom-tag"}, nil)
+	if !slices.Contains(v.Tags, "TG") || !slices.Contains(v.Tags, "brand-new-custom-tag") {
+		t.Fatalf("expected tags to include 'TG' and 'brand-new-custom-tag', got: %v", v.Tags)
+	}
+}
+

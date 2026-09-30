@@ -125,7 +125,6 @@ func DownloadXPost(ctx context.Context, postURL, jobDir string, maxSizeBytes int
 	outTmpl := filepath.Join(jobDir, "%(id)s.%(ext)s")
 
 	args := []string{
-		"--allowed-extractors", "twitter",
 		"-f", "bestvideo*+bestaudio/best",
 		"--merge-output-format", "mp4",
 		"-o", outTmpl,

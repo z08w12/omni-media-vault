@@ -260,6 +260,11 @@ func (c *Catalog) FinalizeRemoteUpload(
 		return errors.New("catalog: remote upload video is nil")
 	}
 	manualTags = uniqueStrings(cleanLabels(manualTags))
+	for _, label := range manualTags {
+		if _, err := c.ensureTag(ctx, label, "user"); err != nil {
+			return err
+		}
+	}
 
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -313,6 +318,9 @@ SELECT state, cancel_requested, source_kind
 		for _, label := range manualTags {
 			tag, err := getTagByLabelTxRaw(ctx, tx, label)
 			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
 				return err
 			}
 			key := strings.ToLower(tag.Label)
