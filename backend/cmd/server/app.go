@@ -58,12 +58,7 @@ type App struct {
 	// configManager 将 config.yaml 的已校验热更新字段发布给运行时消费者；
 	// 文件本身是唯一持久化事实来源。
 	configManager *config.Manager
-	// onTagsChanged invalidates the API read cache after a config-driven tag
-	// catalog mutation. It is installed before the HTTP server starts serving.
 	onTagsChanged func()
-
-	// crawlerUploader 把脚本爬虫保存在本地的视频上传到每个爬虫配置的目标 drive。
-	crawlerUploader crawlerUploadRunner
 
 	// nightlyRunner 协调两种互斥任务：定时完整流水线，以及 admin 手动触发的
 	// “扫所有真实网盘 → 等新视频资产 → 对账本地资产 → 去重”精简流水线。
@@ -87,14 +82,6 @@ type App struct {
 	// reconcile 和扫盘结束同时为同一批 pending 视频启动多个长时间入队 goroutine。
 	fingerprintQueueMu  sync.Mutex
 	fingerprintQueueing map[string]bool
-
-	// crawlerUploadRunning 去重管理员手动发起的单爬虫上传任务。
-	crawlerUploadMu      sync.Mutex
-	crawlerUploadRunning map[string]bool
-
-	// uploadProgress 跟踪脚本爬虫迁移到云盘时的实时上传状态。
-	uploadProgressMu sync.Mutex
-	uploadProgress   map[string]driveUploadProgress
 
 	// blacklistSourceDeleteMu protects the one-at-a-time background job that
 	// removes source files for tombstoned videos. The job reads tombstones from
@@ -149,18 +136,4 @@ type driveScanProgress struct {
 	Scanned       int
 	Added         int
 	CooldownUntil time.Time
-}
-
-type driveUploadProgress struct {
-	State        string
-	CurrentTitle string
-	QueueLength  int
-	DoneCount    int
-	TotalCount   int
-}
-
-type crawlerUploadRunner interface {
-	RunOnce(ctx context.Context) error
-	RunDrives(ctx context.Context, driveIDs []string) error
-	StartDrive(ctx context.Context, driveID string) (<-chan error, bool)
 }

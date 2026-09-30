@@ -85,7 +85,6 @@ future_section:
 		{"generation", "thumbnail_concurrency", 1},
 		{"generation", "fingerprint_concurrency", 1},
 		{"preview", "ffmpeg_threads", 1},
-		{"telegram", "upload_proxy", ""},
 		{"telegram", "max_pending_jobs", 0},
 		{"preview", "ffmpeg_path", ""},
 		{"nightly", "disabled", false},
@@ -95,10 +94,7 @@ future_section:
 			t.Errorf("%s.%s = %#v (exists=%v), want %#v", field.section, field.key, got, exists, field.want)
 		}
 	}
-	if after.Telegram.UploadDirectory != "2026-09-16" {
-		t.Fatal("migration changed a string that resembles a date")
-	}
-	for _, removed := range []string{"outdated", "interval_seconds:", "max_depth:", "duration_seconds:", "segments:", "future_option:", "future_section:", "api_base_url:", "api_id:", "api_hash:", "api_files_root:", "local_files_root:"} {
+	for _, removed := range []string{"outdated", "interval_seconds:", "max_depth:", "duration_seconds:", "segments:", "future_option:", "future_section:", "api_base_url:", "api_id:", "api_hash:", "api_files_root:", "local_files_root:", "upload_directory:", "upload_proxy:"} {
 		if strings.Contains(string(written), removed) {
 			t.Errorf("retained %s", removed)
 		}
@@ -197,7 +193,6 @@ preview: *preview
 owner: &owner 42
 telegram:
   allowed_user_ids: [*owner]
-  upload_proxy: "socks5h://proxy.example:1080"
 `)
 	if _, err := manager.SyncTemplate(); err != nil {
 		t.Fatal(err)
@@ -206,7 +201,7 @@ telegram:
 	assertTemplateStructure(t, data)
 	cfg, err := Parse(data)
 	if err != nil || cfg.Preview.Enabled || cfg.Generation.PreviewConcurrency != 3 || cfg.Server.Listen != ":9876" ||
-		cfg.Telegram.UploadProxy != "socks5h://proxy.example:1080" || len(cfg.Telegram.AllowedUserIDs) != 1 || cfg.Telegram.AllowedUserIDs[0] != 42 {
+		len(cfg.Telegram.AllowedUserIDs) != 1 || cfg.Telegram.AllowedUserIDs[0] != 42 {
 		t.Fatalf("migration lost inherited settings: %v", err)
 	}
 }

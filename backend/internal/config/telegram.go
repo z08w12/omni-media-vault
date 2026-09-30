@@ -5,8 +5,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-
-	"github.com/video-site/backend/internal/scopedproxy"
 )
 
 type Telegram struct {
@@ -17,9 +15,6 @@ type Telegram struct {
 	MaxFileSizeBytes    int64   `yaml:"max_file_size_bytes" json:"maxFileSizeBytes"`
 	MaxPendingJobs      int     `yaml:"max_pending_jobs" json:"maxPendingJobs"`
 	FetchTimeoutSeconds int     `yaml:"fetch_timeout_seconds" json:"fetchTimeoutSeconds"`
-	UploadDriveID       string  `yaml:"upload_drive_id" json:"uploadDriveId"`
-	UploadDirectory     string  `yaml:"upload_directory" json:"uploadDirectory"`
-	UploadProxy         string  `yaml:"upload_proxy" json:"-"`
 
 	// The runtime endpoint and paths come exclusively from the deployment's Compose file.
 	APIBaseURL     string `yaml:"-" json:"apiBaseUrl"`
@@ -40,24 +35,6 @@ func (t *Telegram) Validate() error {
 
 	if t.AllowedUserIDs == nil {
 		t.AllowedUserIDs = []int64{}
-	}
-	t.UploadDriveID = strings.TrimSpace(t.UploadDriveID)
-	proxy, err := scopedproxy.Normalize(t.UploadProxy)
-	if err != nil {
-		return errors.New("telegram.upload_proxy 必须为有效的 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址")
-	}
-	t.UploadProxy = proxy
-	t.UploadDirectory = strings.TrimSpace(t.UploadDirectory)
-	if t.UploadDirectory == "" {
-		t.UploadDirectory = "Telegram"
-	}
-	for _, part := range strings.Split(t.UploadDirectory, "/") {
-		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, "\\\x00\r\n") {
-			return errors.New("telegram.upload_directory 必须为网盘根目录下的相对目录，如 Telegram/videos")
-		}
-	}
-	if t.UploadDriveID == "local-upload" || t.UploadDriveID == "telegram-local" {
-		return errors.New("telegram.upload_drive_id 必须选择支持上传的网盘")
 	}
 	if t.MaxFileSizeBytes == 0 {
 		t.MaxFileSizeBytes = 4 << 30

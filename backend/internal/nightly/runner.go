@@ -110,13 +110,6 @@ type Config struct {
 	// the number of generated asset references reset across both asset types.
 	RunLocalAssetReconciliation func(ctx context.Context) (int, error)
 
-	// RunMigration runs crawlerupload.Migrator.RunOnce for Phase 3.
-	RunMigration func(ctx context.Context) error
-
-	// RunTelegramUpload is independent of crawler configuration and runs only
-	// in the scheduled/full pipeline, never during a manual scan-all.
-	RunTelegramUpload func(ctx context.Context) error
-
 	// RestoreCrawlerVideos scans one crawler's retained local source directory
 	// after new-video generation and upload have completed.
 	RestoreCrawlerVideos func(ctx context.Context, driveID string) error
@@ -574,16 +567,6 @@ func (r *Runner) runPipeline(ctx context.Context) {
 	if !r.runLocalAssetReconciliationPhase(ctx, "nightly", "phase 1b") {
 		return
 	}
-	if r.shouldStop(ctx, "nightly", "Telegram upload") {
-		return
-	}
-	if r.cfg.RunTelegramUpload != nil {
-		log.Printf("[nightly] Telegram upload phase")
-		if err := r.cfg.RunTelegramUpload(ctx); err != nil {
-			log.Printf("[nightly] Telegram upload: %v", err)
-			r.recordIssue("telegram_upload", err)
-		}
-	}
 
 	// ---------- Phase 2 ----------
 	if r.shouldStop(ctx, "nightly", "phase 2") {
@@ -594,7 +577,7 @@ func (r *Runner) runPipeline(ctx context.Context) {
 		crawlerIDs = r.cfg.ListCrawlerDrives(ctx)
 	}
 	if len(crawlerIDs) == 0 {
-		log.Printf("[nightly] phase 2/3 skipped: no crawler configured")
+		log.Printf("[nightly] phase 2 skipped: no crawler configured")
 		r.runDedupeAssetCleanupPhase(ctx, "nightly", "phase 5")
 		return
 	}
@@ -610,18 +593,6 @@ func (r *Runner) runPipeline(ctx context.Context) {
 	log.Printf("[nightly] phase 2: waiting for teaser queue to drain")
 	if err := r.waitIdle(ctx, "nightly", "phase 2"); err != nil {
 		return
-	}
-
-	// ---------- Phase 3 ----------
-	if r.shouldStop(ctx, "nightly", "phase 3") {
-		return
-	}
-	log.Printf("[nightly] phase 3: crawler upload")
-	if r.cfg.RunMigration != nil {
-		if err := r.cfg.RunMigration(ctx); err != nil {
-			log.Printf("[nightly] phase 3 migration: %v", err)
-			r.recordIssue("migration", err)
-		}
 	}
 
 	// ---------- Phase 4 ----------

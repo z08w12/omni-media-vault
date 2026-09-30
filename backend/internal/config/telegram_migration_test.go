@@ -11,7 +11,7 @@ import (
 
 func TestTelegramMigrationImportsMissingYAMLAndPreservesExplicitValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	original := []byte("# keep comment\npreview:\n  enabled: false\ntelegram:\n  enabled: false\n  upload_directory: Existing\n")
+	original := []byte("# keep comment\npreview:\n  enabled: false\ntelegram:\n  enabled: false\n  site_base_url: http://existing.example.com\n")
 	if err := os.WriteFile(path, original, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -19,12 +19,12 @@ func TestTelegramMigrationImportsMissingYAMLAndPreservesExplicitValues(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := Telegram{Enabled: true, BotToken: "123:private_token", AllowedUserIDs: []int64{42}, UploadDirectory: "Legacy"}
+	legacy := Telegram{Enabled: true, BotToken: "123:private_token", AllowedUserIDs: []int64{42}, SiteBaseURL: "http://legacy.example.com"}
 	if err = m.MigrateTelegramSettings(legacy); err != nil {
 		t.Fatal(err)
 	}
 	cfg := m.TelegramSettings()
-	if cfg.Enabled || cfg.UploadDirectory != "Existing" || cfg.BotToken != legacy.BotToken || cfg.AllowedUserIDs[0] != 42 {
+	if cfg.Enabled || cfg.SiteBaseURL != "http://existing.example.com" || cfg.BotToken != legacy.BotToken || cfg.AllowedUserIDs[0] != 42 {
 		t.Fatal("migration lost settings or overwrote explicit YAML")
 	}
 	data, _, err := m.ReadYAML()
@@ -103,28 +103,3 @@ func TestTelegramMigrationDoesNotWriteInvalidLegacyCredentials(t *testing.T) {
 	}
 }
 
-func TestTelegramUploadProxyAppliesLiveAndRejectsInvalidUpdate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("{}\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	m, err := NewManager(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, proxy := range []string{"http://proxy.example:7890", "socks5h://proxy.example:1080", ""} {
-		_, version, _ := m.ReadYAML()
-		valid := []byte("telegram:\n  upload_proxy: '" + proxy + "'\n")
-		result, err := m.ReplaceYAML(valid, version)
-		if err != nil || result.RestartRequired || m.TelegramSettings().UploadProxy != proxy {
-			t.Fatal("upload proxy did not apply live", err)
-		}
-		if _, err := m.ReplaceYAML([]byte("telegram:\n  upload_proxy: ftp://proxy.example\n"), result.Version); err == nil {
-			t.Fatal("accepted invalid proxy")
-		}
-		disk, _, _ := m.ReadYAML()
-		if !bytes.Equal(disk, valid) || m.TelegramSettings().UploadProxy != proxy {
-			t.Fatal("invalid update changed persisted or live proxy")
-		}
-	}
-}

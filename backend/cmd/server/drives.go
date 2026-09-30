@@ -15,32 +15,13 @@ import (
 	"github.com/video-site/backend/internal/api"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/drives"
-	"github.com/video-site/backend/internal/drives/googledrive"
-	"github.com/video-site/backend/internal/drives/guangyapan"
 	"github.com/video-site/backend/internal/drives/localstorage"
 	"github.com/video-site/backend/internal/drives/localupload"
-	"github.com/video-site/backend/internal/drives/onedrive"
-	"github.com/video-site/backend/internal/drives/p115"
-	"github.com/video-site/backend/internal/drives/p123"
-	"github.com/video-site/backend/internal/drives/pikpak"
-	"github.com/video-site/backend/internal/drives/quark"
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 	"github.com/video-site/backend/internal/drives/telegramstorage"
-	"github.com/video-site/backend/internal/drives/webdav"
-	"github.com/video-site/backend/internal/drives/wopan"
 	"github.com/video-site/backend/internal/fingerprint"
 	"github.com/video-site/backend/internal/preview"
-	"github.com/video-site/backend/internal/readretry"
 )
-
-// guangYaPanLegacyRootPath keeps existing path-based mounts working until the
-// user saves a directory ID through the unified root directory field.
-func guangYaPanLegacyRootPath(rootID string, credentials map[string]string) string {
-	if strings.TrimSpace(rootID) != "" {
-		return ""
-	}
-	return strings.TrimSpace(credentials["root_path"])
-}
 
 func (a *App) attachDrive(ctx context.Context, d *catalog.Drive) error {
 	a.driveAttachMu.Lock()
@@ -874,14 +855,6 @@ func configureDriveCredentialLease(lease driveCredentialLease, d *catalog.Drive)
 		return
 	}
 	anchorKey := ""
-	switch d.Kind {
-	case "quark":
-		anchorKey = "cookie"
-	case p123.Kind:
-		anchorKey = "access_token"
-	case "pikpak", "wopan", guangyapan.Kind, "onedrive", googledrive.Kind:
-		anchorKey = "refresh_token"
-	}
 	lease.state.mu.Lock()
 	defer lease.state.mu.Unlock()
 	if lease.generation != lease.state.generation {
@@ -983,142 +956,6 @@ func (a *App) attachDriveConfigUnlocked(ctx context.Context, d *catalog.Drive, r
 
 	var drv drives.Drive
 	switch d.Kind {
-	case "quark":
-		drv = quark.New(quark.Config{
-			ID:            d.ID,
-			Cookie:        d.Credentials["cookie"],
-			RootID:        d.RootID,
-			UploadTempDir: a.uploadWorkDir("quark"),
-			OnCookieUpdate: func(cookie string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{"cookie": cookie})
-			},
-		})
-	case "p115":
-		drv = p115.New(p115.Config{
-			ID:            d.ID,
-			Cookie:        d.Credentials["cookie"],
-			RootID:        d.RootID,
-			UploadTempDir: a.uploadWorkDir("p115"),
-		})
-	case p123.Kind:
-		drv = p123.New(p123.Config{
-			ID:            d.ID,
-			Username:      d.Credentials["username"],
-			Password:      d.Credentials["password"],
-			AccessToken:   d.Credentials["access_token"],
-			Platform:      d.Credentials["platform"],
-			RootID:        d.RootID,
-			UploadTempDir: a.uploadWorkDir(p123.Kind),
-			OnTokenUpdate: func(access string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{"access_token": access})
-			},
-		})
-	case "pikpak":
-		drv = pikpak.New(pikpak.Config{
-			ID:               d.ID,
-			Username:         d.Credentials["username"],
-			Password:         d.Credentials["password"],
-			Platform:         d.Credentials["platform"],
-			RefreshToken:     d.Credentials["refresh_token"],
-			AccessToken:      d.Credentials["access_token"],
-			CaptchaToken:     d.Credentials["captcha_token"],
-			DeviceID:         d.Credentials["device_id"],
-			RootID:           d.RootID,
-			DisableMediaLink: pikpak.ParseBoolDefault(d.Credentials["disable_media_link"], true),
-			UploadTempDir:    a.uploadWorkDir("pikpak"),
-			OnTokenUpdate: func(access, refresh, captcha, deviceID string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{
-					"access_token":  access,
-					"refresh_token": refresh,
-					"captcha_token": captcha,
-					"device_id":     deviceID,
-				})
-			},
-		})
-	case "wopan":
-		drv = wopan.New(wopan.Config{
-			ID:            d.ID,
-			AccessToken:   d.Credentials["access_token"],
-			RefreshToken:  d.Credentials["refresh_token"],
-			FamilyID:      d.Credentials["family_id"],
-			RootID:        d.RootID,
-			UploadTempDir: a.uploadWorkDir("wopan"),
-			OnTokenUpdate: func(access, refresh string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{
-					"access_token":  access,
-					"refresh_token": refresh,
-				})
-			},
-		})
-	case guangyapan.Kind:
-		drv = guangyapan.New(guangyapan.Config{
-			ID:             d.ID,
-			RootID:         d.RootID,
-			RootPath:       guangYaPanLegacyRootPath(d.RootID, d.Credentials),
-			PhoneNumber:    d.Credentials["phone_number"],
-			CaptchaToken:   d.Credentials["captcha_token"],
-			SendCode:       parseBoolDefault(strings.TrimSpace(d.Credentials["send_code"]), false),
-			VerifyCode:     d.Credentials["verify_code"],
-			VerificationID: d.Credentials["verification_id"],
-			AccessToken:    d.Credentials["access_token"],
-			RefreshToken:   d.Credentials["refresh_token"],
-			ClientID:       d.Credentials["client_id"],
-			DeviceID:       d.Credentials["device_id"],
-			PageSize:       parseIntDefault(strings.TrimSpace(d.Credentials["page_size"]), 100),
-			OrderBy:        parseIntDefault(strings.TrimSpace(d.Credentials["order_by"]), 3),
-			SortType:       parseIntDefault(strings.TrimSpace(d.Credentials["sort_type"]), 1),
-			AccountBaseURL: d.Credentials["account_base_url"],
-			APIBaseURL:     d.Credentials["api_base_url"],
-			UploadTempDir:  a.uploadWorkDir(guangyapan.Kind),
-			OnCredentialsUpdate: func(updated map[string]string) {
-				a.persistDriveCredentials(credentialLease, updated)
-			},
-		})
-	case "onedrive":
-		drv = onedrive.New(onedrive.Config{
-			ID:           d.ID,
-			RootID:       d.RootID,
-			Region:       d.Credentials["region"],
-			AccessToken:  d.Credentials["access_token"],
-			RefreshToken: d.Credentials["refresh_token"],
-			AuthMode:     d.Credentials["auth_mode"],
-			ClientID:     d.Credentials["client_id"],
-			ClientSecret: d.Credentials["client_secret"],
-			IsSharePoint: parseBoolDefault(d.Credentials["is_sharepoint"], false),
-			SiteID:       d.Credentials["site_id"],
-			RenewAPIURL:  d.Credentials["api_url_address"],
-			OnTokenUpdate: func(access, refresh string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{
-					"access_token":  access,
-					"refresh_token": refresh,
-				})
-			},
-		})
-	case googledrive.Kind:
-		drv = googledrive.New(googledrive.Config{
-			ID:           d.ID,
-			RootID:       d.RootID,
-			AccessToken:  d.Credentials["access_token"],
-			RefreshToken: d.Credentials["refresh_token"],
-			ClientID:     d.Credentials["client_id"],
-			ClientSecret: d.Credentials["client_secret"],
-			OAuthURL:     d.Credentials["oauth_url"],
-			APIBaseURL:   d.Credentials["api_base_url"],
-			OnTokenUpdate: func(access, refresh string) {
-				a.persistDriveCredentials(credentialLease, map[string]string{
-					"access_token":  access,
-					"refresh_token": refresh,
-				})
-			},
-		})
-	case webdav.Kind:
-		drv = webdav.New(webdav.Config{
-			ID:       d.ID,
-			BaseURL:  d.Credentials["base_url"],
-			Username: d.Credentials["username"],
-			Password: d.Credentials["password"],
-			RootID:   d.RootID,
-		})
 	case localstorage.Kind:
 		drv = localstorage.New(localstorage.Config{
 			ID:                   d.ID,
@@ -1241,13 +1078,6 @@ func (a *App) newDriveGenerationWorkers(drv drives.Drive) (*preview.Worker, *pre
 }
 
 func generationCooldownForDrive(drv drives.Drive) time.Duration {
-	if drv == nil {
-		return 0
-	}
-	switch strings.ToLower(drv.Kind()) {
-	case "wopan", "guangyapan":
-		return 10 * time.Minute
-	}
 	return 0
 }
 
@@ -1289,17 +1119,7 @@ func (a *App) uploadWorkDir(kind string) string {
 }
 
 func fingerprintConfigForDrive(drv drives.Drive) fingerprint.Config {
-	cfg := fingerprint.Config{RateLimitCooldown: 5 * time.Minute}
-	if drv == nil {
-		return cfg
-	}
-	switch strings.ToLower(drv.Kind()) {
-	case "p115", "p123", "onedrive", "wopan", "guangyapan":
-		cfg.RateLimitCooldown = 10 * time.Minute
-	case "pikpak":
-		cfg.RateLimitCooldown = 5 * time.Minute
-	}
-	return cfg
+	return fingerprint.Config{RateLimitCooldown: 5 * time.Minute}
 }
 
 // scriptCrawlerRootDir 是所有通用脚本爬虫 drive 共享的根目录。
@@ -1642,20 +1462,6 @@ func (a *App) driveHasActiveWork(driveID string) bool {
 		return true
 	}
 
-	a.uploadProgressMu.Lock()
-	uploading := a.uploadProgress[driveID].State != ""
-	a.uploadProgressMu.Unlock()
-	if uploading {
-		return true
-	}
-
-	a.crawlerUploadMu.Lock()
-	crawlerUploading := a.crawlerUploadRunning[driveID]
-	a.crawlerUploadMu.Unlock()
-	if crawlerUploading {
-		return true
-	}
-
 	a.mu.Lock()
 	previewWorker := a.workers[driveID]
 	thumbWorker := a.thumbWorkers[driveID]
@@ -1811,14 +1617,13 @@ func (a *App) stopDriveTasks(ctx context.Context, driveID string) bool {
 	canceled := a.cancelDriveTaskContexts(driveID)
 	queued := a.clearQueuedDriveTask(driveID)
 	fingerprintQueued := a.clearFingerprintQueueing(driveID)
-	uploading := a.clearCrawlerUploadProgress(driveID)
 	gate := a.driveOperationGate(driveID)
 	gate.controlMu.Lock()
 	hadWorkers := a.resetDriveGenerationWorkers(ctx, driveID)
 	gate.controlMu.Unlock()
-	stopped := canceled > 0 || queued || fingerprintQueued || uploading || hadWorkers
-	log.Printf("[tasks] stop drive=%s stopped=%v canceled_tasks=%d queued=%v fingerprint_queue=%v uploading=%v workers=%v",
-		driveID, stopped, canceled, queued, fingerprintQueued, uploading, hadWorkers)
+	stopped := canceled > 0 || queued || fingerprintQueued || hadWorkers
+	log.Printf("[tasks] stop drive=%s stopped=%v canceled_tasks=%d queued=%v fingerprint_queue=%v workers=%v",
+		driveID, stopped, canceled, queued, fingerprintQueued, hadWorkers)
 	return stopped
 }
 
@@ -1860,11 +1665,6 @@ func (a *App) driveTaskIDs() []string {
 		ids[id] = struct{}{}
 	}
 	a.fingerprintQueueMu.Unlock()
-	a.uploadProgressMu.Lock()
-	for id := range a.uploadProgress {
-		ids[id] = struct{}{}
-	}
-	a.uploadProgressMu.Unlock()
 	a.mu.Lock()
 	for id := range a.workers {
 		ids[id] = struct{}{}
@@ -2189,102 +1989,3 @@ func (a *App) retireDriveRuntime(id string) {
 	a.mu.Unlock()
 }
 
-// listDriveDirChildren 实现 AdminServer.ListDriveDirChildren：
-// 列指定 drive 在 parentID 下的直接子目录，仅返回目录条目（IsDir=true），文件忽略。
-//
-// parentID 为空时使用 drive 实例的 RootID()。用户在"设置跳过目录"弹窗里
-// 浏览的是整个网盘逻辑根，方便从根目录起逐层挑跳过点。
-//
-// 性能优化：p115 的 Driver.List 走 SDK 的 ListWithLimit，会把目录里全部文件 +
-// 目录分页拉完才返回；某些 115 根目录累积了几万个视频，单次列目录可能卡几十
-// 秒（叠加 driver 的 2s 间隔限频）。所以 p115 走 ListDirsOnly 快路径：单页
-// (1150)、按 file_type 排序，扫一遍只挑目录条目，1 次 API 调用搞定。其它网盘
-// 走标准 List + IsDir 过滤 —— 它们的根目录通常不会有几万个文件。
-//
-// drive 未挂载（如凭证错误未通过 Init）时返回 error；前端展示 5xx 给用户。
-type driveNotAttachedError struct {
-	driveID   string
-	lastError string
-}
-
-func (e *driveNotAttachedError) Error() string {
-	message := fmt.Sprintf("drive %s not attached", e.driveID)
-	if e.lastError != "" {
-		message += ": " + e.lastError
-	}
-	return message
-}
-
-func (a *App) currentDriveNotAttachedError(ctx context.Context, driveID string) error {
-	err := &driveNotAttachedError{driveID: driveID}
-	if a != nil && a.cat != nil {
-		if d, getErr := a.cat.GetDrive(ctx, driveID); getErr == nil && d != nil {
-			err.lastError = strings.TrimSpace(d.LastError)
-		}
-	}
-	return err
-}
-
-func (a *App) listDriveDirChildren(ctx context.Context, driveID, parentID string) (children []api.DriveDirEntry, resultErr error) {
-	taskCtx, done, admitted := a.registerDriveTaskContext(ctx, driveID, 0)
-	if !admitted {
-		return nil, fmt.Errorf("drive %s configuration is waiting to take effect", driveID)
-	}
-	defer done()
-	ctx = taskCtx
-	defer func() {
-		// Closing the directory picker (or navigating away) cancels its request;
-		// that says nothing about the provider's connection state.
-		if errors.Is(resultErr, context.Canceled) {
-			return
-		}
-		var notAttached *driveNotAttachedError
-		if errors.As(resultErr, &notAttached) && notAttached.lastError != "" {
-			// The attach path already persisted the provider's root cause. A
-			// directory picker cannot add new information while no driver exists,
-			// so do not replace that cause with a generic secondary error.
-			return
-		}
-		if resultErr != nil {
-			a.recordDriveRuntimeStatus(driveID, "error", resultErr.Error())
-			return
-		}
-		a.recordDriveRuntimeStatus(driveID, "ok", "")
-	}()
-
-	drv, ok := a.registry.Get(driveID)
-	if !ok {
-		return nil, a.currentDriveNotAttachedError(ctx, driveID)
-	}
-	if parentID == "" {
-		parentID = drv.RootID()
-	}
-	// This interactive operation owns its transport retries. The scanner owns
-	// retries for background discovery; adding them to Driver.List would stack
-	// both policies. Keep one deadline across requests and backoff waits.
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-	entries, err := readretry.Do(ctx, func() ([]drives.Entry, error) {
-		// p115 fast path avoids fetching pages of files just to show directories.
-		if fast, ok := drv.(interface {
-			ListDirsOnly(context.Context, string) ([]drives.Entry, error)
-		}); ok {
-			return fast.ListDirsOnly(ctx, parentID)
-		}
-		return drv.List(ctx, parentID)
-	}, readretry.Options{OnRetry: func(retry int, delay time.Duration, err error) {
-		log.Printf("[dirtree] drive=%s directory=%s read failed; retry=%d/%d delay=%s: %v",
-			driveID, parentID, retry, readretry.MaxRetries, delay, err)
-	}})
-	if err != nil {
-		return nil, fmt.Errorf("list drive %s parent %s: %w", driveID, parentID, err)
-	}
-	out := make([]api.DriveDirEntry, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir {
-			continue
-		}
-		out = append(out, api.DriveDirEntry{ID: e.ID, Name: e.Name})
-	}
-	return out, nil
-}

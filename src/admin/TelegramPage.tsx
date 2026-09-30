@@ -17,7 +17,6 @@ import { useToast } from "@/components/ToastContext";
 import { formatBytes } from "./storageFormat";
 import { importStageLabel } from "./telegram/config";
 import { useTelegramAvailability } from "./telegram/useTelegramAvailability";
-import { TelegramUploadSettings } from "./telegram/TelegramUploadSettings";
 import "@/styles/telegram.css";
 
 const RECENT_IMPORT_LIMIT = 50;
@@ -254,7 +253,6 @@ function TelegramWorkspace() {
             </div>
           )}
         </section>
-        <TelegramUploadSettings />
       </div>
       <section className="tg-panel" aria-labelledby="tg-jobs">
         <div className="tg-heading">

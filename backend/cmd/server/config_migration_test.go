@@ -68,9 +68,6 @@ func TestStartupConfigMigrationImportsLegacyValuesBeforeAddingDefaults(t *testin
 			} else if !cfg.Telegram.Enabled || cfg.Telegram.BotToken != "123:migration_test" || len(cfg.Telegram.AllowedUserIDs) != 1 || cfg.Telegram.AllowedUserIDs[0] != 42 {
 				t.Fatal("startup defaults blocked legacy Telegram import")
 			}
-			if cfg.Telegram.UploadDriveID != "cloud" {
-				t.Fatal("startup migration lost Telegram settings")
-			}
 			stored, err := cat.GetTelegramSettings(ctx)
 			if err != nil || stored.Version != "" {
 				t.Fatalf("legacy Telegram settings were not cleared: %v", err)
@@ -85,7 +82,7 @@ func TestStartupConfigMigrationImportsLegacyValuesBeforeAddingDefaults(t *testin
 			if err := yaml.Unmarshal(data, &document); err != nil {
 				t.Fatal(err)
 			}
-			if _, exists := document["telegram"]["upload_proxy"]; !exists {
+			if _, exists := document["telegram"]["fetch_timeout_seconds"]; !exists {
 				t.Fatal("startup did not fill the new Telegram field")
 			}
 			if _, exists := document["nightly"]["cron_hour"]; exists {

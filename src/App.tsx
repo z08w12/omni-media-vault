@@ -18,14 +18,12 @@ import {
 import { SkyStarfield } from "@/components/SkyStarfield";
 import { VideoDetailLoading } from "@/components/VideoDetailLoading";
 import { CrawlersPageLoading } from "@/admin/CrawlersPageLoading";
-import { DrivesPageLoading } from "@/admin/DrivesPageLoading";
 import { useAuth } from "@/admin/AuthContext";
 import { RequireAuth } from "@/admin/RequireAuth";
 import { RequireAdmin } from "@/admin/RequireAdmin";
 import {
   loadBackupPage,
   loadCrawlersPage,
-  loadDrivesPage,
   loadLogsPage,
   loadSettingsPage,
   loadTelegramPage,
@@ -65,9 +63,6 @@ const AdminLayout = lazy(() =>
 );
 const LoginPage = lazy(() =>
   import("@/admin/LoginPage").then((module) => ({ default: module.LoginPage }))
-);
-const DrivesPage = lazy(() =>
-  loadDrivesPage().then((module) => ({ default: module.DrivesPage }))
 );
 const CrawlersPage = lazy(() =>
   loadCrawlersPage().then((module) => ({ default: module.CrawlersPage }))
@@ -244,15 +239,7 @@ function OtherRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/admin/drives" replace />} />
-        <Route
-          path="drives"
-          element={
-            <PageSuspense fallback={<DrivesPageLoading />}>
-              <DrivesPage />
-            </PageSuspense>
-          }
-        />
+        <Route index element={<Navigate to="/admin/videos" replace />} />
         <Route
           path="crawlers"
           element={

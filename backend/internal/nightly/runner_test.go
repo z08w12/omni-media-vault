@@ -302,10 +302,6 @@ func TestRunPipelineHonoursPhaseOrder(t *testing.T) {
 			rec.push("asset-reconciliation")
 			return 2, nil
 		},
-		RunMigration: func(context.Context) error {
-			rec.push("migrate")
-			return nil
-		},
 		RestoreCrawlerVideos: func(_ context.Context, id string) error {
 			rec.push("restore:" + id)
 			return nil
@@ -329,7 +325,6 @@ func TestRunPipelineHonoursPhaseOrder(t *testing.T) {
 		"list-crawler",
 		"crawl:sp-1",
 		"wait-idle", // after phase 2
-		"migrate",
 		"restore:sp-1",
 		"dedupe-cleanup",
 	}
@@ -411,10 +406,6 @@ func TestRunScanAllOnlyScansConfiguredDrivesAndDedupes(t *testing.T) {
 		RunCrawlerCrawl: func(_ context.Context, id string) {
 			rec.push("crawl:" + id)
 		},
-		RunMigration: func(context.Context) error {
-			rec.push("migrate")
-			return nil
-		},
 		RestoreCrawlerVideos: func(_ context.Context, id string) error {
 			rec.push("restore:" + id)
 			return nil
@@ -478,10 +469,6 @@ func TestRunPipelineSkipsMigrationWhenNoCrawler(t *testing.T) {
 			rec.push("asset-reconciliation")
 			return 0, nil
 		},
-		RunMigration: func(context.Context) error {
-			rec.push("migrate")
-			return nil
-		},
 		RunDedupeAssetCleanup: func(context.Context) error {
 			rec.push("dedupe-cleanup")
 			return nil
@@ -491,8 +478,8 @@ func TestRunPipelineSkipsMigrationWhenNoCrawler(t *testing.T) {
 	r.runPipeline(context.Background())
 
 	for _, c := range rec.snapshot() {
-		if c == "migrate" || c == "crawl:sp-1" {
-			t.Fatalf("phase 2/3 should be skipped when no crawler, got call %q", c)
+		if c == "crawl:sp-1" {
+			t.Fatalf("phase 2 should be skipped when no crawler, got call %q", c)
 		}
 	}
 	foundCleanup := false
@@ -538,7 +525,6 @@ func TestRunPipelineExitsWhenContextCancelledMidPhase(t *testing.T) {
 			rec.push("asset-reconciliation")
 			return 0, nil
 		},
-		RunMigration:          func(context.Context) error { rec.push("migrate"); return nil },
 		RunDedupeAssetCleanup: func(context.Context) error { rec.push("dedupe-cleanup"); return nil },
 	})
 
@@ -546,7 +532,7 @@ func TestRunPipelineExitsWhenContextCancelledMidPhase(t *testing.T) {
 
 	got := rec.snapshot()
 	for _, c := range got {
-		if c == "crawl" || c == "migrate" || c == "asset-reconciliation" || c == "wait-idle" {
+		if c == "crawl" || c == "asset-reconciliation" || c == "wait-idle" {
 			t.Fatalf("subsequent phase should not run after cancel, got call %q", c)
 		}
 		if c == "dedupe-cleanup" {
@@ -619,7 +605,6 @@ func TestCtxCancelPreventsLaterPhases(t *testing.T) {
 			return []string{"x"}
 		},
 		RunCrawlerCrawl: func(context.Context, string) { rec.push("crawl") },
-		RunMigration:    func(context.Context) error { rec.push("migrate"); return nil },
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -628,7 +613,7 @@ func TestCtxCancelPreventsLaterPhases(t *testing.T) {
 	r.runPipeline(ctx)
 
 	for _, c := range rec.snapshot() {
-		if c == "crawl" || c == "migrate" || c == "list-crawler" {
+		if c == "crawl" || c == "list-crawler" {
 			t.Fatalf("later phase should not run after ctx done; got %q", c)
 		}
 	}

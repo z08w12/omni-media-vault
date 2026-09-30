@@ -20,8 +20,7 @@ import * as api from "./api";
 import { Modal } from "./Modal";
 import { ConfirmModal } from "./ConfirmModal";
 import { useToast } from "@/components/ToastContext";
-import { generationStateClass, generationStateLabel } from "./drive/constants";
-import { CrawlerUploadTargetField } from "./drive/CrawlerUploadTargetField";
+import { generationStateClass, generationStateLabel } from "./generationStatus";
 import { SpiderIcon } from "./icons/SpiderIcon";
 import { AdminEmptyVisual } from "./AdminEmptyVisual";
 import { CrawlerListSkeleton } from "./CrawlersPageLoading";
@@ -31,7 +30,7 @@ import {
   useAdminRouteRevalidation,
 } from "./AdminRouteCache";
 
-const BUSY_STATES = new Set(["scanning", "generating", "uploading", "queued"]);
+const BUSY_STATES = new Set(["scanning", "generating", "queued"]);
 const POLL_INTERVAL_MS = 5000;
 
 function statusBusy(status?: api.DriveGenerationStatus) {
@@ -43,8 +42,7 @@ function crawlerBusy(crawler: api.AdminCrawler) {
     statusBusy(crawler.scanGenerationStatus) ||
     statusBusy(crawler.thumbnailGenerationStatus) ||
     statusBusy(crawler.previewGenerationStatus) ||
-    statusBusy(crawler.fingerprintGenerationStatus) ||
-    statusBusy(crawler.uploadGenerationStatus)
+    statusBusy(crawler.fingerprintGenerationStatus)
   );
 }
 
@@ -52,11 +50,9 @@ export function CrawlersPage() {
   const floatingActionPageRef = useAdminFloatingActionSpace<HTMLElement>();
   const routeActive = useAdminRouteActive();
   const [list, setList] = useState<api.AdminCrawler[]>([]);
-  const [uploadTargets, setUploadTargets] = useState<api.AdminDrive[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailTargetId, setDetailTargetId] = useState("");
   const [runningId, setRunningId] = useState("");
-  const [uploadingId, setUploadingId] = useState("");
   const [stoppingId, setStoppingId] = useState("");
   const [togglingPausedId, setTogglingPausedId] = useState("");
   // undefined = 编辑器关闭；null = 新建；其余 = 编辑已有爬虫
@@ -72,9 +68,8 @@ export function CrawlersPage() {
       refreshingRef.current = true;
       if (!silent) setLoading(true);
       try {
-        const [data, drives] = await Promise.all([api.listCrawlers(), api.listDrives()]);
+        const data = await api.listCrawlers();
         setList(data);
-        setUploadTargets(drives.filter((d) => d.canUpload));
       } catch (e) {
         if (!silent) show(e instanceof Error ? e.message : "加载爬虫失败", "error");
       } finally {
@@ -117,23 +112,6 @@ export function CrawlersPage() {
       show(e instanceof Error ? e.message : "触发失败", "error");
     } finally {
       setRunningId("");
-    }
-  }
-
-  async function uploadVideos(crawler: api.AdminCrawler) {
-    setUploadingId(crawler.id);
-    try {
-      const resp = await api.uploadCrawlerVideos(crawler.id);
-      if (!resp.accepted) {
-        show(resp.message || "当前爬虫暂不满足上传条件", "info");
-        return;
-      }
-      show("已触发当前爬虫的上传任务", "success");
-      await refresh(true);
-    } catch (e) {
-      show(e instanceof Error ? e.message : "触发上传失败", "error");
-    } finally {
-      setUploadingId("");
     }
   }
 
@@ -214,12 +192,10 @@ export function CrawlersPage() {
                   crawler={crawler}
                   expanded={detailTargetId === crawler.id}
                   running={runningId === crawler.id}
-                  uploading={uploadingId === crawler.id}
                   stopping={stoppingId === crawler.id}
                   togglingPaused={togglingPausedId === crawler.id}
                   onToggleOpen={() => setDetailTargetId((current) => (current === crawler.id ? "" : crawler.id))}
                   onRun={() => run(crawler)}
-                  onUpload={() => uploadVideos(crawler)}
                   onStop={() => stop(crawler)}
                   onEdit={() => {
                     setDetailTargetId("");
@@ -252,7 +228,6 @@ export function CrawlersPage() {
           key={editorTarget?.id ?? "new"}
           open
           crawler={editorTarget}
-          uploadTargets={uploadTargets}
           onClose={() => setEditorTarget(undefined)}
           onSaved={() => {
             setEditorTarget(undefined);
@@ -264,7 +239,7 @@ export function CrawlersPage() {
       <ConfirmModal
         open={deleteTarget !== null}
         title="删除爬虫"
-        message={`确定删除爬虫「${deleteTarget?.name ?? ""}」？正在运行的任务将先自动停止；退出后，本地保留的视频、封面、预览和抓取文件将一并删除，已迁移到网盘的视频不受影响。`}
+        message={`确定删除爬虫「${deleteTarget?.name ?? ""}」？正在运行的任务将先自动停止；退出后，本地保留的视频、封面、预览和抓取文件将一并删除。`}
         plainConfirm
         hideIcon
         loading={deleting}
@@ -279,12 +254,10 @@ function CrawlerRow({
   crawler,
   expanded,
   running,
-  uploading,
   stopping,
   togglingPaused,
   onToggleOpen,
   onRun,
-  onUpload,
   onStop,
   onEdit,
   onDelete,
@@ -293,12 +266,10 @@ function CrawlerRow({
   crawler: api.AdminCrawler;
   expanded: boolean;
   running: boolean;
-  uploading: boolean;
   stopping: boolean;
   togglingPaused: boolean;
   onToggleOpen: () => void;
   onRun: () => void;
-  onUpload: () => void;
   onStop: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -331,9 +302,6 @@ function CrawlerRow({
           <button className="admin-btn" type="button" onClick={onRun} disabled={running}>
             {running ? "触发中..." : "立即抓取"}
           </button>
-          <button className="admin-btn" type="button" onClick={onUpload}>
-            {uploading ? "提交中..." : "触发上传"}
-          </button>
           <button className="admin-btn" type="button" onClick={onEdit}>
             编辑
           </button>
@@ -363,7 +331,6 @@ function CrawlerDetail({
   onStop: () => void;
 }) {
   const scan = crawler.scanGenerationStatus;
-  const upload = crawlerUploadDisplayStatus(crawler);
   const busy = crawlerBusy(crawler);
   return (
     <div className="admin-crawler-detail">
@@ -381,17 +348,9 @@ function CrawlerDetail({
           stateText={scan?.state === "scanning" ? "抓取中" : generationStateLabel(scan?.state || "idle")}
           counts={[
             { label: "累计爬取", value: crawler.totalCrawledCount ?? 0 },
+            { label: "本地视频", value: crawler.localVideoCount ?? 0 },
             { label: "本轮检查", value: scan?.scannedCount ?? 0 },
             { label: "本轮新增", value: scan?.addedCount ?? 0 },
-          ]}
-        />
-        <GenStageCard
-          label="上传"
-          status={upload.status}
-          stateText={upload.text}
-          counts={[
-            { label: "已上传", value: crawler.migratedVideoCount ?? 0 },
-            { label: "本地保留", value: crawler.localVideoCount ?? 0 },
           ]}
         />
         <GenStageCard
@@ -430,49 +389,6 @@ function CrawlerDetail({
       )}
     </div>
   );
-}
-
-function crawlerUploadDisplayStatus(crawler: api.AdminCrawler): {
-  status: api.DriveGenerationStatus;
-  text: string;
-} {
-  const live = crawler.uploadGenerationStatus;
-  const state = live?.state || "idle";
-  const localCount = crawler.localVideoCount ?? 0;
-  const totalCount = crawler.totalCrawledCount ?? 0;
-  const base: api.DriveGenerationStatus = {
-    state,
-    currentTitle: live?.currentTitle,
-    queueLength: live?.queueLength ?? 0,
-    cooldownUntil: live?.cooldownUntil,
-    scannedCount: live?.scannedCount ?? 0,
-    addedCount: live?.addedCount ?? 0,
-    doneCount: live?.doneCount ?? 0,
-    totalCount: live?.totalCount ?? 0,
-  };
-
-  if (!crawler.uploadDriveId) {
-    return {
-      status: base,
-      text: localCount > 0 ? "本地保存" : generationStateLabel(state),
-    };
-  }
-  if (state === "uploading") {
-    return { status: base, text: "上传中" };
-  }
-  if (state === "queued") {
-    return { status: base, text: "排队中" };
-  }
-  if (localCount > 0) {
-    return {
-      status: base,
-      text: "待处理",
-    };
-  }
-  if (totalCount > 0) {
-    return { status: base, text: "完成" };
-  }
-  return { status: base, text: generationStateLabel(state) };
 }
 
 function GenStageCard({
@@ -516,8 +432,6 @@ type EditorForm = {
   name: string;
   targetNew: string;
   proxy: string;
-  uploadProxy: string;
-  uploadDriveId: string;
 };
 
 function editorFormFromCrawler(crawler: api.AdminCrawler | null): EditorForm {
@@ -527,21 +441,17 @@ function editorFormFromCrawler(crawler: api.AdminCrawler | null): EditorForm {
     name: crawler?.name ?? "",
     targetNew: crawler?.targetNew || "10",
     proxy: crawler?.proxy ?? "",
-    uploadProxy: crawler?.uploadProxy ?? "",
-    uploadDriveId: crawler?.uploadDriveId ?? "",
   };
 }
 
 function CrawlerEditorModal({
   open,
   crawler,
-  uploadTargets,
   onClose,
   onSaved,
 }: {
   open: boolean;
   crawler: api.AdminCrawler | null;
-  uploadTargets: api.AdminDrive[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -696,8 +606,6 @@ function CrawlerEditorModal({
         scriptSourceUrl: form.scriptSourceUrl.trim(),
         targetNew: target,
         proxy: form.proxy.trim(),
-        uploadProxy: form.uploadProxy.trim(),
-        uploadDriveId: form.uploadDriveId,
       });
       if (resp.warning) {
         show(`已保存，但初始化失败：${resp.warning}`, "error");
@@ -918,20 +826,6 @@ function CrawlerEditorModal({
                       setTestResult(null);
                     }}
                     placeholder="支持http或socks5代理"
-                  />
-                </div>
-                <CrawlerUploadTargetField
-                  value={form.uploadDriveId}
-                  onChange={(value) => set("uploadDriveId", value)}
-                  uploadTargets={uploadTargets}
-                />
-                <div className="admin-form__row">
-                  <label htmlFor="crawler-upload-proxy">上传代理</label>
-                  <input
-                    id="crawler-upload-proxy"
-                    value={form.uploadProxy}
-                    onChange={(e) => set("uploadProxy", e.target.value)}
-                    placeholder="仅本地视频上传到网盘时使用"
                   />
                 </div>
               </div>

@@ -15,7 +15,7 @@ func TestPlaybackSourceLabelsFollowLocalAndMigratedStorage(t *testing.T) {
 	ctx := context.Background()
 	c := openRemoteUploadAPICatalog(t)
 	s := &Server{Catalog: c}
-	if err := c.UpsertDrive(ctx, &catalog.Drive{ID: "cloud", Kind: "onedrive", Name: "My Drive", Status: "ok", RootID: "root"}); err != nil {
+	if err := c.UpsertDrive(ctx, &catalog.Drive{ID: "cloud", Kind: "localstorage", Name: "My Drive", Status: "ok", RootID: "root"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"local-upload-normal", "local-upload-telegram", "shared-telegram"} {
@@ -74,6 +74,6 @@ func TestPlaybackSourceLabelsFollowLocalAndMigratedStorage(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The logical ID stays local-upload-prefixed after moving to the cloud.
-		check("OneDrive", "/p/stream/cloud/remote-"+id)
+		check("本地存储", "/p/stream/cloud/remote-"+id)
 	}
 }

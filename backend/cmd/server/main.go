@@ -24,7 +24,6 @@ import (
 	"github.com/video-site/backend/internal/backuptransfer"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/config"
-	"github.com/video-site/backend/internal/crawlerupload"
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 	"github.com/video-site/backend/internal/fingerprint"
 	"github.com/video-site/backend/internal/mediaimport"
@@ -171,14 +170,6 @@ func main() {
 	app.proxy = proxy.New(app.registry)
 	app.proxy.SetAllowForcedRelay(cfg.Proxy.AllowsForcedRelay())
 	app.proxy.SetStreamStatusReporter(app.recordPlaybackDriveStatus)
-	app.crawlerUploader = crawlerupload.New(crawlerupload.Config{
-		Catalog:          cat,
-		Registry:         app.registry,
-		GetDrive:         app.activeDriveConfig,
-		PreviewEnabled:   app.previewEnabled,
-		CommonThumbDir:   app.commonThumbsDir(),
-		OnUploadProgress: app.updateCrawlerUploadProgress,
-	})
 
 	// 初始化本地内置盘；外部云盘放到 HTTP 服务启动后异步挂载，避免上游
 	// 登录态校验拖慢端口监听。
@@ -362,9 +353,6 @@ func main() {
 			}
 			return app.scheduleScan(taskCtx, driveID)
 		},
-		OnCrawlerUploadRequested: func(driveID string) (bool, string) {
-			return app.scheduleManualCrawlerUploadMigration(ctx, driveID)
-		},
 		OnStopDriveTasks: func(driveID string) bool {
 			return app.stopDriveTasks(ctx, driveID)
 		},
@@ -429,9 +417,6 @@ func main() {
 		GetNightlyJobStatus: func() api.NightlyJobStatus {
 			return app.nightlyJobStatus()
 		},
-		ListDriveDirChildren: func(reqCtx context.Context, driveID, parentID string) ([]api.DriveDirEntry, error) {
-			return app.listDriveDirChildren(reqCtx, driveID, parentID)
-		},
 	}
 
 	r := chi.NewRouter()
@@ -471,8 +456,6 @@ func main() {
 		RunCrawlerCrawl:             app.runScriptCrawlerCrawl,
 		WaitPreviewQueuesIdle:       app.waitAllPreviewQueuesIdle,
 		RunLocalAssetReconciliation: app.reconcileLocalGeneratedAssets,
-		RunMigration:                app.runCrawlerUploadMigration,
-		RunTelegramUpload:           app.runTelegramUploadMigration,
 		RestoreCrawlerVideos:        app.restoreScriptCrawlerVideos,
 		RunDedupeAssetCleanup:       app.cleanupDuplicateVideoAssets,
 	})

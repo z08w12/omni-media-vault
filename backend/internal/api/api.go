@@ -1759,26 +1759,10 @@ func (s *Server) videoSourceLabel(ctx context.Context, v *catalog.Video) string 
 
 func driveKindLabel(kind string) string {
 	switch kind {
-	case "quark":
-		return "夸克网盘"
-	case "p115":
-		return "115网盘"
-	case "p123":
-		return "123网盘"
-	case "pikpak":
-		return "PikPak"
-	case "wopan":
-		return "联通网盘"
-	case "guangyapan":
-		return "光鸭网盘"
-	case "onedrive":
-		return "OneDrive"
-	case "googledrive":
-		return "Google Drive"
-	case "webdav":
-		return "WebDAV"
 	case localstorage.Kind, localUploadDriveID:
 		return "本地存储"
+	case "telegram", catalog.TelegramLocalDriveID:
+		return "Telegram"
 	default:
 		return kind
 	}

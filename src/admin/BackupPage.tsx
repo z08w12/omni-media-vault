@@ -42,7 +42,6 @@ const BACKUP_SELECTION_OPTIONS: Array<{
   key: keyof api.BackupSelection;
   label: string;
 }> = [
-  { key: "cloudDrives", label: "网盘凭证和对应视频资源" },
   { key: "crawlerScripts", label: "爬虫脚本和对应的视频资源" },
   { key: "uploadStorage", label: "上传存储和对应视频资源" },
   { key: "localStorage", label: "本地存储和对应的视频资源" },

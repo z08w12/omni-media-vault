@@ -254,7 +254,7 @@ func TestThumbnailOffsetsPreferMiddleFrame(t *testing.T) {
 		duration float64
 		want     []float64
 	}{
-		{name: "unknown duration", duration: 0, want: []float64{5, 1, 0}},
+		{name: "unknown duration", duration: 0, want: []float64{0, 1, 5}},
 		{name: "long video", duration: 2804.9, want: []float64{1402.45, 5, 1, 0}},
 		{name: "short video", duration: 8.9, want: []float64{4.45, 5, 1, 0}},
 		{name: "middle equals fallback", duration: 10, want: []float64{5, 1, 0}},

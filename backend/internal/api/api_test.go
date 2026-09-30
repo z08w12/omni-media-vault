@@ -98,9 +98,9 @@ func TestVideoSourceKeepsDirectStreamForMp4(t *testing.T) {
 	}
 }
 
-func TestDriveKindLabelUsesCompactP115Name(t *testing.T) {
-	if got := driveKindLabel("p115"); got != "115网盘" {
-		t.Fatalf("p115 source label = %q, want 115网盘", got)
+func TestDriveKindLabel(t *testing.T) {
+	if got := driveKindLabel("localstorage"); got != "本地存储" {
+		t.Fatalf("localstorage source label = %q, want 本地存储", got)
 	}
 }
 
@@ -2547,10 +2547,10 @@ func TestHandleVideoDetailIncludesDriveKindLabel(t *testing.T) {
 	})
 	now := time.Now()
 	if err := cat.UpsertDrive(ctx, &catalog.Drive{
-		ID:        "drive-onedrive",
-		Kind:      "onedrive",
-		Name:      "Personal Drive",
-		RootID:    "root",
+		ID:        "drive-local",
+		Kind:      "localstorage",
+		Name:      "Local Storage",
+		RootID:    "/media",
 		Status:    "ok",
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -2559,7 +2559,7 @@ func TestHandleVideoDetailIncludesDriveKindLabel(t *testing.T) {
 	}
 	if err := cat.UpsertVideo(ctx, &catalog.Video{
 		ID:          "video-1",
-		DriveID:     "drive-onedrive",
+		DriveID:     "drive-local",
 		FileID:      "file-1",
 		Ext:         "mp4",
 		Title:       "Video",
@@ -2581,8 +2581,8 @@ func TestHandleVideoDetailIncludesDriveKindLabel(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.SourceLabel != "OneDrive" {
-		t.Fatalf("sourceLabel = %q, want OneDrive", got.SourceLabel)
+	if got.SourceLabel != "本地存储" {
+		t.Fatalf("sourceLabel = %q, want 本地存储", got.SourceLabel)
 	}
 	if got.MediaType != "video/mp4" {
 		t.Fatalf("mediaType = %q, want video/mp4", got.MediaType)

@@ -86,9 +86,3 @@ telegram:
   # 待处理任务上限、文件获取超时（秒）
   max_pending_jobs: 100
   fetch_timeout_seconds: 1800
-  # 后续转存任务使用的网盘和相对目录；网盘留空时仅保存到本地
-  # 转存沿用 nightly 调度，保存不会立即执行转存
-  upload_drive_id: ""
-  upload_directory: "Telegram"
-  # 仅用于 TG 网盘转存，支持 HTTP、HTTPS、SOCKS5、SOCKS5H
-  upload_proxy: ""

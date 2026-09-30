@@ -14,7 +14,6 @@ function reusableModuleLoader<T>(
   };
 }
 
-export const loadDrivesPage = reusableModuleLoader(() => import("./DrivesPage"));
 export const loadCrawlersPage = reusableModuleLoader(
   () => import("./CrawlersPage")
 );

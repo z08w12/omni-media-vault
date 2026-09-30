@@ -2,7 +2,6 @@ import { ADMIN_PAGE_TITLES } from "./adminPageTitle";
 import {
   loadBackupPage,
   loadCrawlersPage,
-  loadDrivesPage,
   loadLogsPage,
   loadSettingsPage,
   loadTelegramPage,
@@ -15,7 +14,6 @@ type AdminPagePath = (typeof ADMIN_PAGE_TITLES)[number]["path"];
 type AdminPageModuleLoader = () => Promise<unknown>;
 
 const loadersByPath = {
-  "/admin/drives": loadDrivesPage,
   "/admin/crawlers": loadCrawlersPage,
   "/admin/videos": loadVideosPage,
   "/admin/tags": loadTagsPage,

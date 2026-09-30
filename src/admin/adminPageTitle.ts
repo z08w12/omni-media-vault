@@ -1,5 +1,4 @@
 export const ADMIN_PAGE_TITLES = [
-  { path: "/admin/drives", title: "网盘管理" },
   { path: "/admin/crawlers", title: "爬虫管理" },
   { path: "/admin/videos", title: "媒体管理" },
   { path: "/admin/tags", title: "标签管理" },
@@ -25,8 +24,6 @@ export function getAdminPageTitle(pathname: string): string {
   return page?.title ?? DEFAULT_ADMIN_PAGE_TITLE;
 }
 
-/** Drive details render their own storage name, so the shared page header is redundant. */
-export function shouldShowAdminPageHeader(pathname: string, search = ""): boolean {
-  if (normalizeAdminPath(pathname) !== "/admin/drives") return true;
-  return !new URLSearchParams(search).get("drive")?.trim();
+export function shouldShowAdminPageHeader(_pathname: string, _search = ""): boolean {
+  return true;
 }

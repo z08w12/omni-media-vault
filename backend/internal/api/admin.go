@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/video-site/backend/internal/backuptransfer"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/config"
-	"github.com/video-site/backend/internal/drives/quark"
 	"github.com/video-site/backend/internal/mediaimport"
 	"github.com/video-site/backend/internal/scanjob"
 	"github.com/video-site/backend/internal/telegram"
@@ -86,7 +84,6 @@ type AdminServer struct {
 	OnDriveDeleteCleanup           func(ctx context.Context, driveID string) (int, error)
 	OnDriveRemoved                 func(driveID string)
 	OnScanRequested                func(context.Context, string) bool
-	OnCrawlerUploadRequested       func(driveID string) (bool, string)
 	OnStopDriveTasks               func(driveID string) bool
 	OnStopAllTasks                 func() int
 	OnRegenPreview                 func(videoID string)
@@ -113,47 +110,20 @@ type AdminServer struct {
 	// Theme 读写（"dark" | "pink" | "sky"）
 	GetTheme func() string
 	SetTheme func(theme string) error
-	// OnRunScanAllJob 触发一次手动全量扫盘：只扫描配置的真实云盘、等待新视频
-	// 资产生成并运行视频去重。爬虫、迁移和恢复只属于定时 nightly 流水线。
+	// OnRunScanAllJob 触发一次手动全量扫盘：只扫描配置的来源、等待新视频
+	// 资产生成并运行视频去重。
 	// 立即返回；若共享 Runner 正在跑或已排队，会拒绝重复触发。
 	OnRunScanAllJob func() bool
 	// GetNightlyJobStatus 返回共享维护 Runner 的状态，用于避免手动扫盘、单盘任务
 	// 和定时 nightly 流水线互相重叠。
 	GetNightlyJobStatus func() NightlyJobStatus
-	// ListDriveDirChildren 列出某个 drive 在 parentID 目录下的直接子目录。
-	// parentID 为空时使用 drive 的 RootID。返回 (子目录列表, error)。
-	// 用于"设置跳过目录"弹窗按需展开浏览网盘目录树；只返回目录条目，文件忽略。
-	// 调用方应当处理 error 并以 5xx 返回前端。
-	ListDriveDirChildren func(ctx context.Context, driveID, parentID string) ([]DriveDirEntry, error)
-	// 123网盘扫码登录接口测试注入；生产留空走官方 user.123pan.cn。
-	P123UserAPIBaseURL string
-	P123HTTPClient     *http.Client
-	// 115网盘扫码登录接口测试注入；生产留空使用带超时的默认客户端。
-	P115QRHTTPClient *http.Client
-	// 夸克网盘扫码登录接口测试注入；生产留空走官方 uop.quark.cn 和 pan.quark.cn。
-	QuarkQRUOPBaseURL string
-	QuarkQRPanBaseURL string
-	QuarkQRHTTPClient *http.Client
-	quarkQRMu         sync.Mutex
-	quarkQRClient     *quark.QRClient
-	// 联通网盘扫码登录接口测试注入；生产留空走官方 panservice.mail.wo.cn。
-	WopanQRAPIBaseURL string
-	WopanQRHTTPClient *http.Client
-	// 光鸭网盘扫码登录接口测试注入；生产留空走官方 account.guangyapan.com。
-	GuangYaPanAccountBaseURL string
-	GuangYaPanHTTPClient     *http.Client
 }
 
 const (
-	driveTaskBusyMessage = "当前存储有正在进行的任务，请稍后重试"
-	fullScanBusyMessage  = "当前有全量扫描任务正在进行，请稍后重试"
+	driveTaskBusyMessage       = "当前存储有正在进行的任务，请稍后重试"
+	fullScanBusyMessage        = "当前有全量扫描任务正在进行，请稍后重试"
+	driveConfigDeferredMessage = "配置已保存，将在当前任务结束后生效"
 )
-
-// DriveDirEntry 是 dirtree 接口的一条返回项：网盘上的一个目录节点。
-type DriveDirEntry struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
 
 type GenerationStatus struct {
 	Result        *scanjob.Result `json:"result,omitempty"`
@@ -241,30 +211,6 @@ func (a *AdminServer) Register(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(a.Auth.AdminRequired)
 
-			// 网盘
-			r.Get("/drives", a.handleListDrives)
-			r.Get("/drives/storage", a.handleDriveStorage)
-			r.Post("/drives", a.handleUpsertDrive)
-			r.Post("/drives/quark/qr", a.handleQuarkQRStart)
-			r.Post("/drives/quark/qr/status", a.handleQuarkQRStatus)
-			r.Post("/drives/p115/qr", a.handleP115QRStart)
-			r.Post("/drives/p115/qr/status", a.handleP115QRStatus)
-			r.Post("/drives/p123/qr", a.handleP123QRStart)
-			r.Get("/drives/p123/qr/{uniID}", a.handleP123QRStatus)
-			r.Post("/drives/wopan/qr", a.handleWopanQRStart)
-			r.Get("/drives/wopan/qr/{uuid}", a.handleWopanQRStatus)
-			r.Post("/drives/guangyapan/qr", a.handleGuangYaPanQRStart)
-			r.Get("/drives/guangyapan/qr/status", a.handleGuangYaPanQRStatus)
-			r.Get("/drives/{id}/credentials", a.handleGetDriveCredentials)
-			r.Delete("/drives/{id}", a.handleDeleteDrive)
-			r.Post("/drives/{id}/rescan", a.handleRescan)
-			r.Post("/drives/{id}/tasks/stop", a.handleStopDriveTasks)
-			r.Post("/drives/{id}/skip-dirs", a.handleSetDriveSkipDirs)
-			r.Get("/drives/{id}/dirtree", a.handleListDriveDirTree)
-			r.Post("/drives/{id}/previews/failed/regenerate", a.handleRegenFailedPreviews)
-			r.Post("/drives/{id}/thumbnails/failed/regenerate", a.handleRegenFailedThumbnails)
-			r.Post("/drives/{id}/fingerprints/failed/regenerate", a.handleRegenFailedFingerprints)
-
 			// 爬虫
 			r.Get("/crawlers", a.handleListCrawlers)
 			r.Post("/crawlers", a.handleUpsertCrawler)
@@ -273,7 +219,6 @@ func (a *AdminServer) Register(r chi.Router) {
 			r.Post("/crawlers/test-script", a.handleTestCrawlerScript)
 			r.Delete("/crawlers/{id}", a.handleDeleteCrawler)
 			r.Post("/crawlers/{id}/run", a.handleRunCrawler)
-			r.Post("/crawlers/{id}/upload", a.handleUploadCrawlerVideos)
 			r.Post("/crawlers/{id}/paused", a.handleSetCrawlerPaused)
 			r.Post("/crawlers/{id}/tasks/stop", a.handleStopCrawlerTasks)
 

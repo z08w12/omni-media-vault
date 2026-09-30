@@ -4,7 +4,6 @@ import "@/styles/admin-controls.css";
 import "@/styles/admin.css";
 import {
   ArchiveRestore,
-  HardDrive,
   Menu,
   ScrollText,
   SlidersHorizontal,
@@ -405,19 +404,6 @@ export function AdminLayout() {
         <nav className="admin-nav" onClick={() => setMobileNavigationOpen(false)}>
           <div className="admin-nav__group">
             <span className="admin-nav__group-label">资源</span>
-            <NavLink
-              to="/admin/drives"
-              className={({ isActive }) =>
-                `admin-nav__link ${isActive ? "is-active" : ""}`
-              }
-            >
-              <span className="admin-nav__icon" aria-hidden="true">
-                <HardDrive size={15} />
-              </span>
-              <span className="admin-nav__text">
-                <span className="admin-nav__title">网盘管理</span>
-              </span>
-            </NavLink>
             <NavLink
               to="/admin/crawlers"
               className={({ isActive }) =>

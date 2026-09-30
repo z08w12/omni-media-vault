@@ -66,7 +66,6 @@ func TestMaintenanceScansDrivesConcurrentlyBeforeLaterPhases(t *testing.T) {
 				},
 				ListCrawlerDrives: func(context.Context) []string { return []string{"crawler"} },
 				RunCrawlerCrawl:   func(context.Context, string) { rec.push("crawl") },
-				RunMigration:      func(context.Context) error { rec.push("migrate"); return nil },
 				RestoreCrawlerVideos: func(context.Context, string) error {
 					rec.push("restore")
 					return nil
@@ -146,7 +145,7 @@ func TestMaintenanceScansDrivesConcurrentlyBeforeLaterPhases(t *testing.T) {
 			}
 			want := []string{"reconcile", "dedupe"}
 			if mode == runModeScheduled {
-				want = []string{"reconcile", "crawl", "migrate", "restore", "dedupe"}
+				want = []string{"reconcile", "crawl", "restore", "dedupe"}
 			}
 			if calls := rec.snapshot(); !reflect.DeepEqual(calls, want) {
 				t.Fatalf("later phases = %v, want %v", calls, want)

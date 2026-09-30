@@ -25,7 +25,6 @@ import { ConfirmModal } from "./ConfirmModal";
 import { formatBytes } from "./storageFormat";
 import { AdminEmptyVisual } from "./AdminEmptyVisual";
 import { AdminPagination } from "./AdminPagination";
-import { driveKindAbbr, driveKindIconPath } from "./drive/constants";
 import { SpiderIcon } from "./icons/SpiderIcon";
 import {
   adminVideosSourceFilter,
@@ -65,7 +64,6 @@ const LOCAL_UPLOAD_SOURCE_ID = "local-upload";
 
 function requestVideoSourceCatalog() {
   return Promise.allSettled([
-    api.listDrives(),
     api.listCrawlers(),
     api.listVideos({ driveId: LOCAL_UPLOAD_SOURCE_ID, page: 1, size: 1 }),
     Promise.all([
@@ -104,7 +102,6 @@ const EMPTY_VIDEO_FILTERS: VideoAdvancedFilterValues = {
 export function VideosPage() {
   const floatingActionPageRef = useAdminFloatingActionSpace<HTMLElement>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [drives, setDrives] = useState<api.AdminDrive[]>([]);
   const [crawlers, setCrawlers] = useState<api.AdminCrawler[]>([]);
   const [hasLocalUploads, setHasLocalUploads] = useState(false);
   const [hasTelegramVideos, setHasTelegramVideos] = useState(false);
@@ -146,18 +143,8 @@ export function VideosPage() {
       const requestID = ++sourceCatalogRequestRef.current;
       const results = await requestVideoSourceCatalog();
       if (requestID !== sourceCatalogRequestRef.current) return;
-      const [driveResult, crawlerResult, localUploadResult, telegramResult] = results;
+      const [crawlerResult, localUploadResult, telegramResult] = results;
 
-      if (driveResult.status === "fulfilled") {
-        setDrives(driveResult.value ?? []);
-      } else if (reportErrors) {
-        show(
-          driveResult.reason instanceof Error
-            ? driveResult.reason.message
-            : "网盘来源加载失败",
-          "error"
-        );
-      }
       if (crawlerResult.status === "fulfilled") {
         setCrawlers(crawlerResult.value ?? []);
       } else if (reportErrors) {
@@ -229,7 +216,6 @@ export function VideosPage() {
       className="admin-page admin-page--with-floating-actions admin-videos-page"
     >
       <VideoSourceNavigation
-        drives={drives}
         crawlers={crawlers}
         hasLocalUploads={hasLocalUploads}
         hasTelegramVideos={hasTelegramVideos}
@@ -241,7 +227,7 @@ export function VideosPage() {
       />
       {activeView === "current" && (
         <CurrentVideosTab
-          drives={drives}
+          crawlers={crawlers}
           sourceDriveId={activeSourceFilter.driveId}
           sourceCrawlerId={activeSourceFilter.crawlerId}
           sourceKind={activeSourceFilter.sourceKind}
@@ -253,7 +239,7 @@ export function VideosPage() {
       )}
       {activeView === "blacklist" && (
         <BlacklistTab
-          drives={drives}
+          crawlers={crawlers}
           page={page}
           setPage={setPage}
         />
@@ -263,7 +249,6 @@ export function VideosPage() {
 }
 
 function VideoSourceNavigation({
-  drives,
   crawlers,
   hasLocalUploads,
   hasTelegramVideos,
@@ -273,7 +258,6 @@ function VideoSourceNavigation({
   onSelectSource,
   onOpenBlacklist,
 }: {
-  drives: api.AdminDrive[];
   crawlers: api.AdminCrawler[];
   hasLocalUploads: boolean;
   hasTelegramVideos: boolean;
@@ -286,7 +270,6 @@ function VideoSourceNavigation({
   const sourceItems: Array<{
     key: AdminVideosSourceKey;
     label: string;
-    drive?: api.AdminDrive;
     crawler?: api.AdminCrawler;
     upload?: boolean;
     telegram?: boolean;
@@ -295,13 +278,6 @@ function VideoSourceNavigation({
 
   if (sourceCatalogLoaded) {
     sourceItems.push(
-      ...drives
-      .filter((drive) => drive.id !== LOCAL_UPLOAD_SOURCE_ID)
-      .map((drive) => ({
-        key: `drive:${drive.id}` as AdminVideosSourceKey,
-        label: drive.name || drive.id,
-        drive,
-      })),
       ...(hasLocalUploads
         ? [
             {
@@ -337,7 +313,6 @@ function VideoSourceNavigation({
               onClick={() => onSelectSource(source.key)}
             >
               <VideoSourceNavigationIcon
-                drive={source.drive}
                 crawler={source.crawler}
                 upload={source.upload}
                 telegram={source.telegram}
@@ -362,13 +337,11 @@ function VideoSourceNavigation({
 }
 
 function VideoSourceNavigationIcon({
-  drive,
   crawler,
   upload,
   telegram,
   all,
 }: {
-  drive?: api.AdminDrive;
   crawler?: api.AdminCrawler;
   upload?: boolean;
   telegram?: boolean;
@@ -383,18 +356,6 @@ function VideoSourceNavigationIcon({
   if (telegram) {
     return <TelegramIcon size={16} className="admin-video-source-tab__glyph is-telegram" />;
   }
-  if (drive) {
-    const iconSrc = driveKindIconPath(drive.kind);
-    return (
-      <span
-        className={`admin-video-source-tab__icon is-drive${iconSrc ? " has-image" : ""}`}
-        data-kind={drive.kind}
-        aria-hidden="true"
-      >
-        {iconSrc ? <img src={iconSrc} alt="" /> : driveKindAbbr(drive.kind)}
-      </span>
-    );
-  }
   if (crawler) {
     return <SpiderIcon size={16} className="admin-video-source-tab__glyph is-crawler" />;
   }
@@ -404,7 +365,7 @@ function VideoSourceNavigationIcon({
 // ---------- 当前视频 ----------
 
 function CurrentVideosTab({
-  drives,
+  crawlers,
   sourceDriveId,
   sourceCrawlerId,
   sourceKind,
@@ -413,7 +374,7 @@ function CurrentVideosTab({
   page,
   setPage,
 }: {
-  drives: api.AdminDrive[];
+  crawlers: api.AdminCrawler[];
   sourceDriveId: string;
   sourceCrawlerId: string;
   sourceKind: "" | "telegram";
@@ -643,7 +604,7 @@ function CurrentVideosTab({
     };
   }, [routeActive, transcodingIds.size, show]);
 
-  const driveNameMap = new Map(drives.map((d) => [d.id, d.name || d.id]));
+  const driveNameMap = new Map(crawlers.map((c) => [c.id, c.name || c.id]));
   driveNameMap.set(LOCAL_UPLOAD_SOURCE_ID, "本地存储");
 
   const listItems = list;
@@ -1088,11 +1049,11 @@ function CurrentVideosTab({
 // ---------- 拉黑视频 ----------
 
 function BlacklistTab({
-  drives,
+  crawlers,
   page,
   setPage,
 }: {
-  drives: api.AdminDrive[];
+  crawlers: api.AdminCrawler[];
   page: number;
   setPage: PageSetter;
 }) {
@@ -1218,7 +1179,7 @@ function BlacklistTab({
     setSelectedIds(new Set());
   }, [searchKeyword]);
 
-  const driveNameMap = new Map(drives.map((d) => [d.id, d.name || d.id]));
+  const driveNameMap = new Map(crawlers.map((c) => [c.id, c.name || c.id]));
   driveNameMap.set(LOCAL_UPLOAD_SOURCE_ID, "本地存储");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const listQueryPending = loading || resolvedListQueryKey !== activeListQueryKey;
