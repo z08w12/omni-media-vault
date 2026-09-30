@@ -84,7 +84,7 @@ func (s *Service) flushMediaGroups(ctx context.Context, before time.Time) error 
 func (s *Service) prepareMediaGroup(ctx context.Context, group catalog.TelegramMediaGroup) ([]catalog.TelegramImport, error) {
 	updates := make([]update, len(group.Updates))
 	caption := ""
-	mediaCount := 0
+	videoCount := 0
 	for i, entry := range group.Updates {
 		u := &updates[i]
 		if err := json.Unmarshal([]byte(entry.Payload), u); err != nil {
@@ -105,10 +105,21 @@ func (s *Service) prepareMediaGroup(ctx context.Context, group catalog.TelegramM
 		if caption == "" {
 			caption = strings.TrimSpace(m.Caption)
 		}
-		if videoMedia(m) != nil || photoMedia(m) != nil {
-			mediaCount++
+		if videoMedia(m) != nil {
+			videoCount++
 		}
 	}
+
+	hasVideo := videoCount > 0
+	mediaCount := videoCount
+	if !hasVideo {
+		for _, u := range updates {
+			if u.Message != nil && photoMedia(u.Message) != nil {
+				mediaCount++
+			}
+		}
+	}
+
 	imports := make([]catalog.TelegramImport, 0, len(updates))
 	mediaIndex := 0
 	for _, u := range updates {
@@ -117,10 +128,15 @@ func (s *Service) prepareMediaGroup(ctx context.Context, group catalog.TelegramM
 			return nil, err
 		}
 		m := u.Message
-		if m.Chat.Type == "private" && s.Allowed(m.From.ID) {
-			if videoMedia(m) != nil || photoMedia(m) != nil {
+		if m != nil && m.Chat.Type == "private" && s.Allowed(m.From.ID) {
+			// 如果媒体组包含视频，则组内的图片为视频封面或说明图片，不作为独立媒体转存
+			if hasVideo && videoMedia(m) == nil && photoMedia(m) != nil {
+				input.Source = nil
+				input.Receipt.Response = "__ignore__"
+			} else if videoMedia(m) != nil || (!hasVideo && photoMedia(m) != nil) {
 				mediaIndex++
 			}
+
 			if input.Source != nil {
 				ownCaption := strings.TrimSpace(m.Caption)
 				if ownCaption == "" {

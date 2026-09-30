@@ -2861,6 +2861,7 @@ func (c *Catalog) ListVisibleVideoIDs(ctx context.Context) ([]string, error) {
 	rows, err := c.db.QueryContext(ctx,
 		`SELECT videos.id FROM videos
 		  WHERE COALESCE(videos.hidden, 0) = 0
+		    AND LOWER(TRIM(COALESCE(videos.ext, ''), '.')) NOT IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
 		    AND `+activeDriveWhereSQL+`
 		    AND `+uniqueVideoWhereSQL+`
 		  ORDER BY videos.id ASC`)
@@ -2892,6 +2893,7 @@ func (c *Catalog) ListVisibleVideoIDsByThumbnailReadiness(ctx context.Context) (
 		        CASE WHEN COALESCE(videos.thumbnail_url, '') != '' THEN 1 ELSE 0 END
 		   FROM videos
 		  WHERE COALESCE(videos.hidden, 0) = 0
+		    AND LOWER(TRIM(COALESCE(videos.ext, ''), '.')) NOT IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
 		    AND `+activeDriveWhereSQL+`
 		    AND `+uniqueVideoWhereSQL+`
 		  ORDER BY videos.id ASC`)

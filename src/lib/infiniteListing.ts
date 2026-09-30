@@ -12,6 +12,7 @@ export type InfiniteListingQuery = {
   q: string;
   tag: string;
   sort: SortKey;
+  mediaType?: string;
 };
 
 export type InfiniteListingState = {
@@ -65,7 +66,7 @@ export type InfiniteListingAction =
 
 /** Batch size is a transport concern, not part of a logical result-set key. */
 export function infiniteListingKey(query: InfiniteListingQuery): string {
-  return JSON.stringify([query.q.trim(), query.tag.trim(), query.sort]);
+  return JSON.stringify([query.q.trim(), query.tag.trim(), query.sort, query.mediaType ?? ""]);
 }
 
 export function infiniteListingCacheMatchesRestore(input: {

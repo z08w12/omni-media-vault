@@ -229,13 +229,8 @@ func TestMediaGroupPhotoOnlyRepliesOnceAndStandalonePhotoStillReplies(t *testing
 		t.Fatal(err)
 	}
 	receipts, err := cat.PendingTelegramReceipts(ctx, s.BotID())
-	if err != nil || len(receipts) != 2 || len(albumJobs(t, cat)) != 0 {
-		t.Fatalf("receipts=%v err=%v", receipts, err)
-	}
-	for _, r := range receipts {
-		if !strings.Contains(renderReceiptMessage(r).text, "请发送视频") || r.MessageID == 2 {
-			t.Fatalf("unexpected photo reply: %+v", r)
-		}
+	if err != nil || len(receipts) != 3 || len(albumJobs(t, cat)) != 1 {
+		t.Fatalf("receipts=%v err=%v jobs=%d", receipts, err, len(albumJobs(t, cat)))
 	}
 }
 

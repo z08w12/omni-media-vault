@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, Heart, Images, Maximize2 } from "lucide-react";
-import { Link, useLocation, useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 import { AdminEmptyVisual } from "@/admin/AdminEmptyVisual";
 import { AppShell } from "@/components/AppShell";
 import { InfiniteFeedStatus } from "@/components/InfiniteFeedStatus";
@@ -294,13 +294,14 @@ export default function PhotosPage() {
 
                       <div className="photo-card__body">
                         <h3 className="photo-card__title">
-                          <Link
-                            to={item.href}
-                            className="photo-card__title-link"
+                          <button
+                            type="button"
+                            className="photo-card__title-btn"
+                            onClick={() => handleOpenPhoto(index)}
                             title={item.title}
                           >
                             {item.title}
-                          </Link>
+                          </button>
                         </h3>
 
                         <div className="photo-card__meta">

@@ -112,14 +112,15 @@ function snapshotFeedSource(input: {
 }
 
 export function listingFeedSource(query: ListingFeedQuery): InfiniteFeedSource {
+  const mediaType = query.mediaType ?? "video";
   return snapshotFeedSource({
-    key: `listing:${infiniteListingKey(query)}`,
+    key: `listing:${infiniteListingKey({ ...query, mediaType })}`,
     kind: "listing",
     batchSize: query.pageSize,
     q: query.q.trim(),
     tag: query.tag.trim(),
     sort: query.sort,
-    mediaType: query.mediaType,
+    mediaType,
   });
 }
 
@@ -142,6 +143,7 @@ export function homeRecommendationFeedSource(): InfiniteFeedSource {
     key: "home:recommend",
     kind: "recommend",
     batchSize: HOME_RECOMMENDATION_BATCH_SIZE,
+    mediaType: "video",
   });
 }
 
@@ -151,5 +153,6 @@ export function homeLatestFeedSource(pageSize: number): InfiniteFeedSource {
     kind: "latest",
     batchSize: pageSize,
     sort: "latest",
+    mediaType: "video",
   });
 }
