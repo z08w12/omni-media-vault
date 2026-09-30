@@ -59,4 +59,15 @@
     padding: 6px 10px;
     margin: 8px;
   }
+  .image-viewer-nav-btn {
+    width: 36px;
+    height: 36px;
+    opacity: 0.85;
+  }
+  .image-viewer-nav-btn.is-prev {
+    left: 8px;
+  }
+  .image-viewer-nav-btn.is-next {
+    right: 8px;
+  }
 }

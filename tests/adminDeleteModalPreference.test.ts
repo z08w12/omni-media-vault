@@ -42,7 +42,7 @@ test("delete and clear confirmation dialogs omit warning icons", () => {
     [sources.tags, '"删除选中标签"'],
     [sources.backups, 'title="删除备份"'],
     [sources.videos, "open={deleteTarget !== null}"],
-    [sources.videos, 'title="批量删除视频"'],
+    [sources.videos, 'title="批量删除媒体"'],
     [sources.videos, 'title="删除全部黑名单源文件"'],
     [sources.videos, 'title="删除源文件"'],
     [sources.videos, 'title="批量删除拉黑视频源文件"'],

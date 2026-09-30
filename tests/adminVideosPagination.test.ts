@@ -45,7 +45,7 @@ test("normal videos keep responsive capacities while blacklist pages contain twe
   );
   assert.match(
     videosPageSource,
-    /const activeListQueryKey = JSON\.stringify\(\[\s*page,\s*pageSize,\s*searchKeyword,\s*sourceDriveId,\s*sourceCrawlerId,\s*sourceKind,\s*appliedFilters,?\s*\]\);/
+    /const activeListQueryKey = JSON\.stringify\(\[\s*page,\s*pageSize,\s*searchKeyword,\s*sourceDriveId,\s*sourceCrawlerId,\s*sourceKind,\s*(?:mediaType,\s*)?appliedFilters,?\s*\]\);/
   );
   assert.match(videosPageSource, /api\.listVideos\(\{[\s\S]*?page,[\s\S]*?size: pageSize,[\s\S]*?keyword: searchKeyword,[\s\S]*?driveId: sourceDriveId,[\s\S]*?crawlerId: sourceCrawlerId,[\s\S]*?\.\.\.appliedFilters/);
 });
@@ -183,7 +183,7 @@ test("admin video searches reuse the debounced home search component", () => {
 test("admin video pagination follows the compact CPA previous and next layout", () => {
   const paginationCalls = Array.from(
     videosPageSource.matchAll(
-      /<AdminPagination\s+page=\{displayedPage \?\? page\}[\s\S]{0,240}?itemLabel="视频"[\s\S]{0,120}?pending=\{listQueryPending\}[\s\S]{0,120}?onPage=\{setPage\}\s*\/>/g
+      /<AdminPagination\s+page=\{displayedPage \?\? page\}[\s\S]{0,240}?itemLabel="(?:视频|项)"[\s\S]{0,120}?pending=\{listQueryPending\}[\s\S]{0,120}?onPage=\{setPage\}\s*\/>/g
     )
   );
   assert.match(adminPaginationSource, /第 \{page\} \/ \{totalPages\} 页 · 共 \{total\} 个\{itemLabel\}/);
@@ -281,7 +281,7 @@ test("empty video tabs use the correct visual and distinguish search misses", ()
   assert.match(blacklistSource, /admin-empty-state admin-empty-state--plain/);
   assert.match(currentSource, /variant=\{hasActiveSearch \? "no-results" : "empty"\}/);
   assert.match(blacklistSource, /variant=\{hasActiveSearch \? "no-results" : "empty"\}/);
-  assert.match(currentSource, /hasActiveSearch \? "未查询到" : "当前库中没有视频"/);
+  assert.match(currentSource, /hasActiveSearch \? "未查询到" : "当前库中没有(?:视频|媒体文件)"/);
   assert.match(blacklistSource, /hasActiveSearch \? "未查询到" : "暂无拉黑视频"/);
   assert.match(blacklistSource, /暂无拉黑视频/);
   assert.doesNotMatch(currentSource, /还没有视频。先在「网盘管理」里配置好盘并触发扫描，或调整搜索词。/);
@@ -374,7 +374,7 @@ test("admin video selections persist across pages and can include the current pa
   assert.doesNotMatch(refreshSource, /setSelectedIds\(new Set\(\)\)/);
   assert.match(currentSource, /const selectPageVideos = \(\) => \{[\s\S]*?new Set\(current\)[\s\S]*?listItems\.forEach\(\(video\) => next\.add\(video\.id\)\)/);
   assert.match(currentSource, /listItems\.every\(\(video\) => selectedIds\.has\(video\.id\)\)/);
-  assert.match(currentSource, /message=\{`确定要删除已选中的 \$\{selectedIds\.size\} 个视频吗？`\}/);
+  assert.match(currentSource, /message=\{`确定要删除已选中的 \$\{selectedIds\.size\} (?:个视频|项媒体)吗？`\}/);
   assert.match(currentSource, /listItems\.every\(\(video\) => deletedIds\.has\(video\.id\)\)/);
   assert.doesNotMatch(currentSource, /success >= listItems\.length/);
 });

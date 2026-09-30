@@ -646,12 +646,12 @@ test("desktop current video list uses a CPA-style responsive card grid", () => {
 
   assert.match(
     videosPageSource,
-    /className="admin-video-card-grid admin-videos-results__content"[\s\S]{0,80}?role="list"[\s\S]{0,80}?aria-label="视频列表"/
+    /className="admin-video-card-grid admin-videos-results__content"[\s\S]{0,80}?role="list"[\s\S]{0,80}?aria-label="(?:视频列表|媒体列表)"/
   );
   assert.match(videosPageSource, /<CurrentVideoCard[\s\S]*?video=\{v\}/);
   assert.match(currentCardSource, /<article className="admin-video-card" role="listitem">/);
   assert.match(currentCardSource, /<footer className="admin-video-card__actions">/);
-  assert.match(currentCardSource, /className="admin-video-card__utility-actions"[\s\S]*?className="admin-btn admin-video-action-icon-button"[\s\S]*?<Edit size=\{15\}[\s\S]*?<VideoDeleteIconButton[\s\S]*?onClick=\{onDelete\}[\s\S]*?title="删除视频"[\s\S]*?ariaLabel="删除视频"[\s\S]*?className="admin-video-card__select"/);
+  assert.match(currentCardSource, /className="admin-video-card__utility-actions"[\s\S]*?className="admin-btn admin-video-action-icon-button"[\s\S]*?<Edit size=\{15\}[\s\S]*?<VideoDeleteIconButton[\s\S]*?onClick=\{onDelete\}[\s\S]*?title=(?:"(?:删除视频|删除媒体)"|\{isImage \? "删除媒体" : "删除视频"\})[\s\S]*?ariaLabel=(?:"(?:删除视频|删除媒体)"|\{isImage \? "删除媒体" : "删除视频"\})[\s\S]*?className="admin-video-card__select"/);
   assert.match(deleteIconButtonSource, /className="admin-btn admin-video-action-icon-button is-danger"[\s\S]*?<Trash2 size=\{15\} aria-hidden="true" \/>/);
   assert.equal(Array.from(videosPageSource.matchAll(/<VideoDeleteIconButton/g)).length, 2);
   assert.match(currentCardSource, /className="admin-video-card__select"[\s\S]*?className="admin-video-card__select-input"[\s\S]*?type="checkbox"[\s\S]*?checked=\{selected\}[\s\S]*?onChange=\{onToggleSelect\}/);
@@ -723,7 +723,7 @@ test("desktop video management toolbar keeps its layout and reuses the home sear
   assert.match(videosPageSource, /admin-videos-filter__batch/);
   assert.doesNotMatch(videosPageSource, /CheckSquare/);
   assert.match(currentFilter, /display\s*:\s*grid/);
-  assert.match(currentFilter, /grid-template-columns\s*:\s*minmax\(240px,\s*360px\)\s+auto\s+minmax\(0,\s*1fr\)/);
+  assert.match(currentFilter, /grid-template-columns\s*:\s*(?:minmax\(240px,\s*360px\)\s+auto\s+minmax\(0,\s*1fr\)|auto\s+minmax\(220px,\s*340px\)\s+minmax\(0,\s*1fr\))/);
   assert.match(currentFilter, /width\s*:\s*100%/);
   assert.match(blacklistFilter, /display\s*:\s*grid/);
   assert.match(blacklistFilter, /grid-template-columns\s*:\s*minmax\(240px,\s*360px\)\s+auto\s+minmax\(0,\s*1fr\)/);
@@ -842,8 +842,8 @@ test("current video delete dialogs use flat modal chrome", () => {
   assert.match(flatModalChrome, /border\s*:\s*0/);
   assert.doesNotMatch(videosPageSource, /开启后会先删除源文件，失败则不会删除管理库记录。/);
   assert.doesNotMatch(videosPageSource, /开启后会先删除源文件，失败的视频会保留管理库记录。/);
-  assert.match(videosPageSource, /title="删除视频"[\s\S]*?confirmText="确认"/);
-  assert.match(videosPageSource, /title="批量删除视频"[\s\S]*?confirmText="确认"/);
+  assert.match(videosPageSource, /title="(?:删除视频|删除媒体)"[\s\S]*?confirmText="确认"/);
+  assert.match(videosPageSource, /title="(?:批量删除视频|批量删除媒体)"[\s\S]*?confirmText="确认"/);
   assert.doesNotMatch(videosPageSource, /confirmText="删除视频"|confirmText="批量删除"/);
   assert.match(deleteSourceOption, /padding\s*:\s*0/);
   assert.match(deleteSourceOption, /border\s*:\s*0/);
@@ -1385,7 +1385,7 @@ test("mobile video management uses compact theme-aware video cards", () => {
   assert.doesNotMatch(videosPageSource, /admin-video-filemeta-pill is-category/);
   assert.doesNotMatch(css, /admin-video-card-category/);
   assert.match(videosPageSource, /<dt>来源<\/dt>[\s\S]*?className="admin-video-card__source"/);
-  assert.match(videosPageSource, /<dt>时长<\/dt>[\s\S]*?formatDur\(video\.durationSeconds\)/);
+  assert.match(videosPageSource, /<dt>(?:时长|\{isImage \? "类型" : "时长"\})<\/dt>[\s\S]*?formatDur\(video\.durationSeconds\)/);
   assert.match(meta, /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)\s+auto/);
   assert.match(source, /text-overflow\s*:\s*ellipsis/);
   assert.doesNotMatch(videosPageSource, /data-label="预览视频"[\s\S]*?<PreviewStatus/);
@@ -1421,10 +1421,10 @@ test("video edit modal stays focused on common metadata", () => {
   const viewVideoLink = ruleBody(adminCss, ".admin-video-edit-view-link");
   const previewStatusDot = ruleBody(adminCss, ".admin-modal--video-edit .admin-video-preview-actions .admin-status::before");
 
-  assert.match(videosPageSource, /ariaLabel="编辑视频"/);
-  assert.match(editModalSource, /title="编辑视频"/);
+  assert.match(videosPageSource, /ariaLabel="(?:编辑视频|编辑媒体)"/);
+  assert.match(editModalSource, /title="(?:编辑视频|编辑媒体)"/);
   assert.match(editModalSource, /className="admin-modal--video-edit"/);
-  assert.match(editModalSource, /className="admin-btn admin-video-edit-view-link"[\s\S]*?to=\{`\/video\/\$\{encodeURIComponent\(video\.id\)\}`\}[\s\S]*?target="_blank"[\s\S]*?rel="noreferrer"[\s\S]*?>\s*查看视频播放页\s*<\/Link>/);
+  assert.match(editModalSource, /className="admin-btn admin-video-edit-view-link"[\s\S]*?to=\{`\/video\/\$\{encodeURIComponent\(video\.id\)\}`\}[\s\S]*?target="_blank"[\s\S]*?rel="noreferrer"[\s\S]*?>\s*查看(?:视频播放页|媒体详情)\s*<\/Link>/);
   assert.doesNotMatch(videosPageSource, /title=\{`编辑视频 ·/);
   assert.doesNotMatch(videosPageSource, /const \[badges, setBadges\]/);
   assert.doesNotMatch(videosPageSource, /const \[thumbnail, setThumbnail\]/);
@@ -1452,7 +1452,7 @@ test("video edit modal stays focused on common metadata", () => {
   assert.match(editModalFooter, /border-top\s*:\s*1px solid var\(--border-subtle\)/);
   assert.match(editTagPicker, /border\s*:\s*0/);
   assert.match(editTagPicker, /background\s*:\s*transparent/);
-  assert.match(editModalSource, /<section className="admin-video-edit-section">\s*<h3>基本信息<\/h3>[\s\S]*?<h3>标签<\/h3>[\s\S]*?<h3>视频信息<\/h3>/);
+  assert.match(editModalSource, /<section className="admin-video-edit-section">\s*<h3>基本信息<\/h3>[\s\S]*?<h3>标签<\/h3>[\s\S]*?<h3>(?:视频信息|媒体信息)<\/h3>/);
   assert.match(editBasics, /grid-template-columns\s*:\s*minmax\(0,\s*2fr\) minmax\(160px,\s*1fr\)/);
   assert.match(selectedTagOption, /background\s*:\s*var\(--accent-soft\)/);
   assert.match(editMeta, /grid-template-columns\s*:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
