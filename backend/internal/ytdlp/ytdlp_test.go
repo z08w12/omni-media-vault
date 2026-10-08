@@ -1,6 +1,8 @@
 package ytdlp
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -153,4 +155,26 @@ func TestCleanTitle(t *testing.T) {
 		t.Errorf("cleanTitle() = %q, want %q", got, want)
 	}
 }
+
+func TestFindCookiesFile(t *testing.T) {
+	dir := t.TempDir()
+	emptyPath := filepath.Join(dir, "cookies.txt")
+	if err := os.WriteFile(emptyPath, []byte(""), 0600); err != nil {
+		t.Fatalf("failed to write empty file: %v", err)
+	}
+	// Empty file should not be returned
+	if got := FindCookiesFile(dir); got == emptyPath {
+		t.Errorf("FindCookiesFile should not return empty file, got %q", got)
+	}
+
+	// Non-empty file should be detected
+	nonEmptyPath := filepath.Join(dir, "cookies.txt")
+	if err := os.WriteFile(nonEmptyPath, []byte("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tTEST\t1\n"), 0600); err != nil {
+		t.Fatalf("failed to write non-empty file: %v", err)
+	}
+	if got := FindCookiesFile(dir); got != nonEmptyPath {
+		t.Errorf("FindCookiesFile(%q) = %q, want %q", dir, got, nonEmptyPath)
+	}
+}
+
 

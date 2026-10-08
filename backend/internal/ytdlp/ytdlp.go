@@ -173,6 +173,25 @@ type ytdlpJSON struct {
 	Entries     []ytdlpJSON `json:"entries"`
 }
 
+// FindCookiesFile looks for a cookies.txt file in standard locations.
+func FindCookiesFile(jobDir string) string {
+	candidates := []string{
+		filepath.Join(jobDir, "cookies.txt"),
+		"cookies.txt",
+		"/opt/video-site-91/cookies.txt",
+		"/etc/yt-dlp/cookies.txt",
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if info, err := os.Stat(c); err == nil && !info.IsDir() && info.Size() > 0 {
+			return c
+		}
+	}
+	return ""
+}
+
 // DownloadVideo downloads the video from the supported public URL into jobDir.
 func DownloadVideo(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
 	return DownloadVideoWithProgress(ctx, videoURL, jobDir, maxSizeBytes, nil)
@@ -218,6 +237,9 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		"--progress-template", "download:%(progress.downloaded_bytes)s/%(progress.total_bytes)s/%(progress.total_bytes_estimate)s",
 		"--print-json",
 	}
+	if cookiesFile := FindCookiesFile(jobDir); cookiesFile != "" {
+		args = append(args, "--cookies", cookiesFile)
+	}
 	if maxSizeBytes > 0 {
 		args = append(args, "--max-filesize", fmt.Sprintf("%d", maxSizeBytes))
 	}
@@ -262,7 +284,19 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		if errStr == "" {
 			errStr = err.Error()
 		}
-		errStr = strings.TrimPrefix(errStr, "ERROR: ")
+		if strings.Contains(errStr, "Sign in to confirm you’re not a bot") ||
+			strings.Contains(errStr, "Sign in to confirm you're not a bot") ||
+			strings.Contains(errStr, "Sign in to confirm your age") ||
+			strings.Contains(errStr, "LOGIN_REQUIRED") {
+			return nil, fmt.Errorf("该视频需要登录验证或年龄确认 (可在服务器放置 cookies.txt 解锁)")
+		}
+		for _, line := range strings.Split(errStr, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "ERROR:") {
+				errStr = strings.TrimSpace(strings.TrimPrefix(line, "ERROR:"))
+				break
+			}
+		}
 		return nil, fmt.Errorf("下载 %s 视频失败: %s", platform, errStr)
 	}
 
