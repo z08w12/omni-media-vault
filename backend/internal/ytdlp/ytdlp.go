@@ -177,15 +177,18 @@ type ytdlpJSON struct {
 func FindCookiesFile(jobDir string) string {
 	candidates := []string{
 		filepath.Join(jobDir, "cookies.txt"),
-		"cookies.txt",
 		"/opt/video-site-91/cookies.txt",
 		"/etc/yt-dlp/cookies.txt",
+		"cookies.txt",
 	}
 	for _, c := range candidates {
 		if c == "" {
 			continue
 		}
 		if info, err := os.Stat(c); err == nil && !info.IsDir() && info.Size() > 0 {
+			if abs, err := filepath.Abs(c); err == nil {
+				return abs
+			}
 			return c
 		}
 	}
@@ -258,25 +261,30 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 	}
 
 	var stdoutBuf bytes.Buffer
-	scanner := bufio.NewScanner(stdoutPipe)
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "download:") {
-			parts := strings.Split(strings.TrimPrefix(trimmed, "download:"), "/")
-			if len(parts) >= 2 {
-				done, _ := strconv.ParseInt(parts[0], 10, 64)
-				total, _ := strconv.ParseInt(parts[1], 10, 64)
-				if total <= 0 && len(parts) >= 3 {
-					total, _ = strconv.ParseInt(parts[2], 10, 64)
+	reader := bufio.NewReaderSize(stdoutPipe, 128*1024)
+	for {
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "download:") {
+				parts := strings.Split(strings.TrimPrefix(trimmed, "download:"), "/")
+				if len(parts) >= 2 {
+					done, _ := strconv.ParseInt(parts[0], 10, 64)
+					total, _ := strconv.ParseInt(parts[1], 10, 64)
+					if total <= 0 && len(parts) >= 3 {
+						total, _ = strconv.ParseInt(parts[2], 10, 64)
+					}
+					if done > 0 && onProgress != nil {
+						onProgress(done, total)
+					}
 				}
-				if done > 0 && onProgress != nil {
-					onProgress(done, total)
-				}
+				continue
 			}
-			continue
+			stdoutBuf.WriteString(line)
 		}
-		stdoutBuf.WriteString(line + "\n")
+		if err != nil {
+			break
+		}
 	}
 
 	if err := cmd.Wait(); err != nil {
