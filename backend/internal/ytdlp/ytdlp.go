@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,11 +12,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var (
 	// XStatusPattern matches status URLs from x.com or twitter.com
 	XStatusPattern = regexp.MustCompile(`(?i)https?://(?:www\.)?(?:x\.com|twitter\.com)/(?:(?:i/web|i)/status|[A-Za-z0-9_]{1,32}/status)/(?P<id>[0-9]{5,20})(?:/(?:video|photo)/[0-9]+)?(?:[?#][^\s]*)?`)
+	// YouTubePattern matches video and shorts URLs from youtube.com or youtu.be
+	YouTubePattern = regexp.MustCompile(`(?i)https?://(?:(?:www|m|music)\.)?(?:youtube\.com/(?:watch\?(?:[^ \t\r\n&]+&)*v=|shorts/|embed/|v/|live/)|youtu\.be/)(?P<id>[A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)`)
 	// HashtagPattern matches tags like #fun #news #中文
 	HashtagPattern = regexp.MustCompile(`(?i)(?:^|[^\w])#([\p{L}\p{N}_-]{1,32})`)
 )
@@ -45,7 +47,6 @@ func ExtractXStatusID(text string) (statusID, statusURL string, found bool) {
 	if len(match) == 0 {
 		return "", "", false
 	}
-	// Extract named or captured ID
 	idIndex := XStatusPattern.SubexpIndex("id")
 	if idIndex > 0 && idIndex < len(match) {
 		statusID = match[idIndex]
@@ -56,6 +57,28 @@ func ExtractXStatusID(text string) (statusID, statusURL string, found bool) {
 		return "", "", false
 	}
 	return statusID, fmt.Sprintf("https://x.com/i/status/%s", statusID), true
+}
+
+// ExtractYouTubeVideoID parses text and returns the YouTube video ID and normalized URL if found.
+func ExtractYouTubeVideoID(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	match := YouTubePattern.FindStringSubmatch(text)
+	if len(match) == 0 {
+		return "", "", false
+	}
+	idIndex := YouTubePattern.SubexpIndex("id")
+	if idIndex > 0 && idIndex < len(match) {
+		videoID = match[idIndex]
+	} else if len(match) > 1 {
+		videoID = match[1]
+	}
+	if videoID == "" {
+		return "", "", false
+	}
+	return videoID, fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID), true
 }
 
 // ExtractHashtags extracts hashtags from caption or description text.
@@ -79,6 +102,38 @@ func ExtractHashtags(text string) []string {
 		}
 	}
 	return tags
+}
+
+func cleanTitle(title, fallback string) string {
+	title = strings.TrimSpace(title)
+	for _, line := range strings.Split(title, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			title = line
+			break
+		}
+	}
+	title = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || strings.ContainsRune(`/\:*?"<>|`, r) {
+			return ' '
+		}
+		return r
+	}, title)
+	title = strings.Trim(strings.Join(strings.Fields(title), " "), ". ")
+	if title == "" {
+		title = fallback
+	}
+	for len([]byte(title)) > 180 {
+		runes := []rune(title)
+		if len(runes) == 0 {
+			break
+		}
+		title = strings.Trim(string(runes[:len(runes)-1]), ". ")
+	}
+	if title == "" {
+		title = fallback
+	}
+	return title
 }
 
 // BinaryPath looks up yt-dlp in the PATH or known paths.
@@ -106,26 +161,45 @@ func IsInstalled() bool {
 }
 
 type ytdlpJSON struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Uploader    string `json:"uploader"`
-	UploaderID  string `json:"uploader_id"`
-	WebpageURL  string `json:"webpage_url"`
-	Filename    string `json:"_filename"`
-	Ext         string `json:"ext"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Uploader    string   `json:"uploader"`
+	UploaderID  string   `json:"uploader_id"`
+	WebpageURL  string   `json:"webpage_url"`
+	Filename    string   `json:"_filename"`
+	Ext         string   `json:"ext"`
+	Tags        []string `json:"tags"`
 	Entries     []ytdlpJSON `json:"entries"`
+}
+
+// DownloadVideo downloads the video from the supported public URL into jobDir.
+func DownloadVideo(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
+	return DownloadVideoWithProgress(ctx, videoURL, jobDir, maxSizeBytes, nil)
 }
 
 // DownloadXPost downloads the video from the public X/Twitter post into jobDir.
 func DownloadXPost(ctx context.Context, postURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
-	return DownloadXPostWithProgress(ctx, postURL, jobDir, maxSizeBytes, nil)
+	return DownloadVideoWithProgress(ctx, postURL, jobDir, maxSizeBytes, nil)
 }
 
 // DownloadXPostWithProgress downloads the video and reports live progress if available.
 func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxSizeBytes int64, onProgress func(done, total int64)) ([]DownloadedVideo, error) {
+	return DownloadVideoWithProgress(ctx, postURL, jobDir, maxSizeBytes, onProgress)
+}
+
+// DownloadVideoWithProgress downloads the video from a public platform URL (X, YouTube, etc.) and reports live progress.
+func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64, onProgress func(done, total int64)) ([]DownloadedVideo, error) {
 	if err := os.MkdirAll(jobDir, 0750); err != nil {
 		return nil, fmt.Errorf("创建下载目录失败: %w", err)
+	}
+
+	platform := "视频"
+	lowerURL := strings.ToLower(videoURL)
+	if strings.Contains(lowerURL, "x.com") || strings.Contains(lowerURL, "twitter.com") {
+		platform = "X"
+	} else if strings.Contains(lowerURL, "youtube.com") || strings.Contains(lowerURL, "youtu.be") {
+		platform = "YouTube"
 	}
 
 	bin := BinaryPath()
@@ -147,7 +221,7 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 	if maxSizeBytes > 0 {
 		args = append(args, "--max-filesize", fmt.Sprintf("%d", maxSizeBytes))
 	}
-	args = append(args, postURL)
+	args = append(args, videoURL)
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -189,7 +263,7 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 			errStr = err.Error()
 		}
 		errStr = strings.TrimPrefix(errStr, "ERROR: ")
-		return nil, fmt.Errorf("下载 X 视频失败: %s", errStr)
+		return nil, fmt.Errorf("下载 %s 视频失败: %s", platform, errStr)
 	}
 
 	// Parse JSON lines from stdoutBuf
@@ -209,7 +283,10 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 		// Fallback: inspect directory for any downloaded mp4 files
 		files, _ := filepath.Glob(filepath.Join(jobDir, "*.mp4"))
 		if len(files) == 0 {
-			return nil, errors.New("公开 X 帖子中没有可下载的视频，或视频超过大小限制")
+			files, _ = filepath.Glob(filepath.Join(jobDir, "*.*"))
+		}
+		if len(files) == 0 {
+			return nil, fmt.Errorf("公开 %s 链接中没有可下载的视频，或视频超过大小限制", platform)
 		}
 		for _, f := range files {
 			stat, _ := os.Stat(f)
@@ -252,7 +329,7 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 		}
 		if maxSizeBytes > 0 && info.Size() > maxSizeBytes {
 			_ = os.Remove(expectedFile)
-			return nil, errors.New("X 视频超过单文件大小上限")
+			return nil, fmt.Errorf("%s 视频超过单文件大小上限", platform)
 		}
 
 		uploader := strings.TrimSpace(entry.Uploader)
@@ -261,24 +338,13 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 			uploader = uploaderID
 		}
 
-		title := strings.TrimSpace(entry.Title)
+		fallbackTitle := fmt.Sprintf("%s-%s", platform, entry.ID)
+		title := cleanTitle(entry.Title, "")
 		if title == "" {
-			title = strings.TrimSpace(entry.Description)
+			title = cleanTitle(entry.Description, "")
 		}
 		if title == "" {
-			title = fmt.Sprintf("X-%s", entry.ID)
-		}
-		// Truncate title if multi-line
-		for _, line := range strings.Split(title, "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" {
-				title = line
-				break
-			}
-		}
-		if len([]rune(title)) > 100 {
-			rs := []rune(title)
-			title = string(rs[:100])
+			title = fallbackTitle
 		}
 
 		desc := strings.TrimSpace(entry.Description)
@@ -298,7 +364,7 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 	}
 
 	if len(results) == 0 {
-		return nil, errors.New("公开 X 帖子中没有可下载的视频，或下载失败")
+		return nil, fmt.Errorf("公开 %s 链接中没有可下载的视频，或下载失败", platform)
 	}
 
 	return results, nil

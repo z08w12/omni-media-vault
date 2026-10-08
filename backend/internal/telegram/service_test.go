@@ -452,3 +452,59 @@ func TestInvalidAcquisitionIsDiscardedWithoutTouchingBotState(t *testing.T) {
 	}
 	t.Fatal("invalid acquisition was not finalized")
 }
+
+func TestAcceptYouTubeVideoPost(t *testing.T) {
+	s, cat := testService(t)
+	ctx := context.Background()
+	m1 := &message{
+		ID:   10,
+		Date: 1789975384,
+		From: user{ID: 42},
+		Text: "Check this https://www.youtube.com/watch?v=dQw4w9WgXcQ #Music #經典",
+	}
+	m1.Chat.ID = 42
+	m1.Chat.Type = "private"
+	u := update{ID: 1, Message: m1}
+	if err := s.accept(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := cat.ListImportJobs(ctx, "telegram", "", 0, 30)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs=%v err=%v", jobs, err)
+	}
+	if jobs[0].SourceLabel != "YouTube" {
+		t.Fatalf("expected SourceLabel YouTube, got %q", jobs[0].SourceLabel)
+	}
+	if jobs[0].RequestedTitle != "YouTube-dQw4w9WgXcQ" {
+		t.Fatalf("expected RequestedTitle YouTube-dQw4w9WgXcQ, got %q", jobs[0].RequestedTitle)
+	}
+	if len(jobs[0].Tags) != 3 || jobs[0].Tags[0] != "YouTube" || jobs[0].Tags[1] != "Music" || jobs[0].Tags[2] != "經典" {
+		t.Fatalf("unexpected tags: %v", jobs[0].Tags)
+	}
+
+	// Sending duplicate YouTube link should reuse existing queued job
+	m2 := &message{
+		ID:   11,
+		Date: 1789975385,
+		From: user{ID: 42},
+		Text: "https://youtu.be/dQw4w9WgXcQ",
+	}
+	m2.Chat.ID = 42
+	m2.Chat.Type = "private"
+	u2 := update{ID: 2, Message: m2}
+	if err := s.accept(ctx, u2); err != nil {
+		t.Fatal(err)
+	}
+	jobsAfter, err := cat.ListImportJobs(ctx, "telegram", "", 0, 30)
+	if err != nil || len(jobsAfter) != 1 {
+		t.Fatalf("expected 1 job after duplicate, got %d", len(jobsAfter))
+	}
+	replies, err := cat.PendingTelegramReceipts(ctx, 123)
+	if err != nil || len(replies) != 2 {
+		t.Fatalf("receipts=%v err=%v", replies, err)
+	}
+	if replies[0].JobID != replies[1].JobID {
+		t.Fatal("duplicate YouTube link created separate jobs")
+	}
+}
+

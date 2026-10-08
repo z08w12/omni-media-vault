@@ -30,7 +30,7 @@ func renderReceiptMessage(r catalog.TelegramReceipt) botMessage {
 	case responseHelp:
 		return botMessage{text: "🎬 <b>保存媒体到 91</b>\n\n" +
 			"直接向机器人发送或转发视频、图片\n" +
-			"或发送公开 X (Twitter) 帖子链接\n" +
+			"或发送公开 X (Twitter) / YouTube 视频链接\n" +
 			"媒体附带的第一行文字会作为标题\n" +
 			"附带的 #标签 会自动添加为标签\n\n" +
 			"/status 转存统计\n" +
@@ -42,7 +42,7 @@ func renderReceiptMessage(r catalog.TelegramReceipt) botMessage {
 		return botMessage{text: "🔒 <b>需要开通权限</b>\n\n" +
 			"你的 Telegram ID：<code>" + strconv.FormatInt(r.SenderID, 10) + "</code>"}
 	case responseUnsupported:
-		return botMessage{text: "ℹ️ <b>请发送视频、图片或公开 X (Twitter) 帖子链接</b>"}
+		return botMessage{text: "ℹ️ <b>请发送视频、图片或公开 X (Twitter) / YouTube 视频链接</b>"}
 	case catalog.TelegramResponseQueueFull:
 		return botMessage{text: "⏳ <b>队列已满</b>\n\n请稍后重新发送视频"}
 	default:

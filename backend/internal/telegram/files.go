@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,9 +49,9 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 	if !s.Allowed(source.SenderID) {
 		return out, &mediaimport.SourceError{Message: "发送者已不在允许用户列表中"}
 	}
-	isX := strings.HasPrefix(source.UniqueID, "x:")
+	isExternal := strings.HasPrefix(source.UniqueID, "x:") || strings.HasPrefix(source.UniqueID, "yt:")
 	size := source.Size
-	if !isX {
+	if !isExternal {
 		if err := validateVideoSize(size, s.cfg.MaxFileSizeBytes); err != nil {
 			return out, &mediaimport.SourceError{Message: err.Error()}
 		}
@@ -85,10 +86,19 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 		}
 		return acquiredFile(source, local, destination, info.Size()), nil
 	}
-	if isX {
+	if isExternal {
 		tempJobDir := filepath.Join(s.cfg.LocalFilesRoot, "temp", j.ID)
 		defer os.RemoveAll(tempJobDir)
-		if err = progress("x_download", 0, 0); err != nil {
+		stageName := "external_download"
+		platformName := "外部"
+		if strings.HasPrefix(source.UniqueID, "x:") {
+			stageName = "x_download"
+			platformName = "X"
+		} else if strings.HasPrefix(source.UniqueID, "yt:") {
+			stageName = "youtube_download"
+			platformName = "YouTube"
+		}
+		if err = progress(stageName, 0, 0); err != nil {
 			return out, err
 		}
 		monitorCtx, cancelMonitor := context.WithCancel(ctx)
@@ -108,7 +118,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			}
 			d, t := maxDone, curTotal
 			progressMu.Unlock()
-			_ = progress("x_download", d, t)
+			_ = progress(stageName, d, t)
 		}
 		go func() {
 			ticker := time.NewTicker(time.Second)
@@ -125,7 +135,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 				}
 			}
 		}()
-		videos, err := ytdlp.DownloadXPostWithProgress(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
+		videos, err := ytdlp.DownloadVideoWithProgress(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
 			updateProgress(done, total)
 		})
 		cancelMonitor()
@@ -133,17 +143,17 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			return out, &mediaimport.SourceError{Message: err.Error()}
 		}
 		if len(videos) == 0 {
-			return out, &mediaimport.SourceError{Message: "未在 X 帖子中检测到视频"}
+			return out, &mediaimport.SourceError{Message: fmt.Sprintf("未在 %s 链接中检测到视频", platformName)}
 		}
 		v := videos[0]
-		_ = progress("x_download", v.Size, v.Size)
+		_ = progress(stageName, v.Size, v.Size)
 		if err := os.Rename(v.Path, destination); err != nil {
 			data, readErr := os.ReadFile(v.Path)
 			if readErr != nil {
-				return out, &mediaimport.SourceError{Message: "无法读取下载的 X 视频"}
+				return out, &mediaimport.SourceError{Message: fmt.Sprintf("无法读取下载的 %s 视频", platformName)}
 			}
 			if writeErr := os.WriteFile(destination, data, 0644); writeErr != nil {
-				return out, &mediaimport.SourceError{Message: "无法保存下载的 X 视频"}
+				return out, &mediaimport.SourceError{Message: fmt.Sprintf("无法保存下载的 %s 视频", platformName)}
 			}
 		}
 		if err = syncLibrary(destination, filepath.Dir(destination)); err != nil {

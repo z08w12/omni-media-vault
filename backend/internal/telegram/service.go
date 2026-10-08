@@ -374,6 +374,24 @@ func (s *Service) prepareImport(ctx context.Context, u update) (catalog.Telegram
 						title = "X-" + statusID
 						tags = append([]string{"X"}, ytdlp.ExtractHashtags(allText)...)
 					}
+				} else if videoID, ytURL, found := ytdlp.ExtractYouTubeVideoID(allText); found {
+					uniqueID := "yt:" + videoID
+					if existingID, err := s.cat.TelegramVideoID(ctx, botID, uniqueID); err == nil && existingID != "" {
+						r.Response = "✅ 这个 YouTube 视频已经转存过"
+					} else {
+						r.Response = ""
+						source = &catalog.TelegramSource{
+							BotID:    botID,
+							SenderID: m.From.ID,
+							FileID:   uniqueID,
+							UniqueID: uniqueID,
+							FileName: ytURL,
+							Size:     0,
+							MIME:     "video/mp4",
+						}
+						title = "YouTube-" + videoID
+						tags = append([]string{"YouTube"}, ytdlp.ExtractHashtags(allText)...)
+					}
 				} else {
 					file := videoMedia(m)
 					isPhoto := false
@@ -385,6 +403,8 @@ func (s *Service) prepareImport(ctx context.Context, u update) (catalog.Telegram
 						r.Response = ""
 						if file.FileID == "" || file.UniqueID == "" {
 							r.Response = "文件信息不完整，请重新发送"
+						} else if !isPhoto && file.Size <= 0 {
+							r.Response = "无法确认视频大小，已拒绝下载，请重新发送视频"
 						} else if file.Size > 0 && s.cfg.MaxFileSizeBytes > 0 && file.Size > s.cfg.MaxFileSizeBytes {
 							r.Response = "文件超过配置的单文件大小限制"
 						} else {

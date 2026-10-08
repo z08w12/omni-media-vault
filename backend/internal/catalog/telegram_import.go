@@ -178,14 +178,27 @@ func acceptTelegramUpdate(ctx context.Context, tx *sql.Tx, receipt TelegramRecei
 					if strings.HasPrefix(source.UniqueID, "x:") {
 						sourceLabel = "X"
 						tagList = []string{"X"}
+					} else if strings.HasPrefix(source.UniqueID, "yt:") {
+						sourceLabel = "YouTube"
+						tagList = []string{"YouTube"}
+					}
+					seenTag := make(map[string]bool)
+					var finalTags []string
+					for _, t := range tagList {
+						t = strings.TrimSpace(t)
+						if t != "" && !seenTag[t] {
+							seenTag[t] = true
+							finalTags = append(finalTags, t)
+						}
 					}
 					for _, t := range tags {
 						t = strings.TrimSpace(t)
-						if t != "" {
-							tagList = append(tagList, t)
+						if t != "" && !seenTag[t] {
+							seenTag[t] = true
+							finalTags = append(finalTags, t)
 						}
 					}
-					tagsJSON, _ := json.Marshal(tagList)
+					tagsJSON, _ := json.Marshal(finalTags)
 					_, err = tx.ExecContext(ctx, `INSERT INTO remote_upload_jobs(id,source_kind,source_payload,source_label,requested_title,tags,state,total_bytes,created_at,updated_at) VALUES(?,'telegram',?,?,?,?,'queued',?,?,?)`, id, string(payload), sourceLabel, title, string(tagsJSON), source.Size, time.Now().UnixMilli(), time.Now().UnixMilli())
 					if err != nil {
 						return err
