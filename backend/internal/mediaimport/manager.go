@@ -23,6 +23,7 @@ import (
 	"github.com/video-site/backend/internal/drives/telegramstorage"
 	"github.com/video-site/backend/internal/persistence"
 	"github.com/video-site/backend/internal/videoname"
+	"github.com/video-site/backend/internal/ytdlp"
 )
 
 const (
@@ -511,6 +512,18 @@ func (m *Manager) processJob(ctx context.Context, job *catalog.RemoteUploadJob) 
 		video, err = m.publishFile(ctx, job.ID, partName, title, ext, metadata.Size)
 		if err != nil {
 			return err
+		}
+	}
+	if titleTags := ytdlp.ExtractHashtags(video.Title); len(titleTags) > 0 {
+		seen := make(map[string]bool)
+		for _, t := range job.Tags {
+			seen[t] = true
+		}
+		for _, t := range titleTags {
+			if !seen[t] {
+				seen[t] = true
+				job.Tags = append(job.Tags, t)
+			}
 		}
 	}
 	autoTags, err := m.catalog.MatchTagAssignments(

@@ -165,6 +165,19 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			j.RequestedTitle = v.Title
 			j.ResolvedTitle = v.Title
 		}
+		extraTags := ytdlp.ExtractHashtags(v.Title + " " + v.Description)
+		if len(extraTags) > 0 {
+			seen := make(map[string]bool)
+			for _, t := range j.Tags {
+				seen[t] = true
+			}
+			for _, t := range extraTags {
+				if !seen[t] {
+					seen[t] = true
+					j.Tags = append(j.Tags, t)
+				}
+			}
+		}
 		return acquiredFile(source, local, destination, v.Size), nil
 	}
 	free, err := mediaimport.AvailableBytes(s.cfg.LocalFilesRoot)

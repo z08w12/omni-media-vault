@@ -390,7 +390,7 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		}
 
 		desc := strings.TrimSpace(entry.Description)
-		hashtags := ExtractHashtags(desc)
+		hashtags := ExtractHashtags(entry.Title + " " + desc)
 
 		results = append(results, DownloadedVideo{
 			MediaID:     entry.ID,
