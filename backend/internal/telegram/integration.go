@@ -72,14 +72,29 @@ func (i *Integration) Shutdown(ctx context.Context) error {
 	}
 }
 func (i *Integration) session() *Service { i.mu.RLock(); defer i.mu.RUnlock(); return i.active }
+func (i *Integration) diskReserve() int64 {
+	if i.configManager != nil {
+		if res := i.configManager.RemoteUploadSettings().DiskReserveBytes; res > 0 {
+			return res
+		}
+	}
+	if i.reserve > 0 {
+		return i.reserve
+	}
+	return 1 << 30
+}
+
 func (i *Integration) Status() Status {
 	i.mu.RLock()
 	s, status := i.active, i.status
 	i.mu.RUnlock()
 	if s != nil {
 		status = s.Status()
-	} else if n, err := mediaimport.AvailableBytes(status.Config.LocalFilesRoot); err == nil {
-		status.CacheAvailableBytes = n
+	} else {
+		status.DiskReserveBytes = i.diskReserve()
+		if n, err := mediaimport.AvailableBytes(status.Config.LocalFilesRoot); err == nil {
+			status.CacheAvailableBytes = n
+		}
 	}
 	return status
 }
@@ -160,10 +175,11 @@ func (i *Integration) reconcile(ctx context.Context) {
 		return
 	}
 	if i.session() == nil {
-		s := New(cfg, cfg.BotToken, i.cat, i.uploadDir, i.reserve)
+		s := New(cfg, cfg.BotToken, i.cat, i.uploadDir, i.diskReserve())
 		// Read the live calendar timezone without restarting the receiver when
 		// scheduling settings change.
 		s.statusTimezone = func() string { return i.configManager.LiveSettings().NightlyTimezone }
+		s.statusReserve = func() int64 { return i.diskReserve() }
 		i.mu.RLock()
 		wake := i.wake
 		i.mu.RUnlock()

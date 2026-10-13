@@ -29,7 +29,7 @@ export class VideoShareUnavailableError extends Error {
   }
 }
 
-// 真实后端接口调用。未配置网盘时，各接口返回空数据。
+// 真实后端接口调用。未配置存储源时，各接口返回空数据。
 export async function fetchHomeVideos(count?: number): Promise<VideoItem[]> {
   // 整库随机轮次由服务端按登录会话维护；前端只需告知本次展示数量。
   const path = count === undefined ? "/api/home" : `/api/home?count=${count}`;

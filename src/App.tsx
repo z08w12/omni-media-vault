@@ -273,7 +273,7 @@ function OtherRoutes() {
             </PageSuspense>
           }
         />
-        <Route path="theme" element={<Navigate to="/admin/drives" replace />} />
+        <Route path="theme" element={<Navigate to="/admin/crawlers" replace />} />
         <Route
           path="backup"
           element={

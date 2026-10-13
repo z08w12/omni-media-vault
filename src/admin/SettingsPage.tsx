@@ -702,7 +702,7 @@ export function SettingsPage() {
                   index="02"
                   icon={<Film size={16} />}
                   title="媒体生成"
-                  description="控制视频资源生成的并发数，请根据服务器性能和网盘API风控调整，如果性能允许推荐 1-3-1"
+                  description="控制视频资源生成的并发数，请根据服务器性能调整，如果性能允许推荐 1-3-1"
                 >
                   {GENERATION_FIELDS.map(({ field, label }) => (
                     <SettingsRow

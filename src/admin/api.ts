@@ -1077,8 +1077,8 @@ export type ScanResult = {
 };
 
 /**
- * 扫描所有已配置的真实网盘，等待新视频资产处理完成后执行全库视频去重。
- * 不触发脚本爬虫、爬虫上传或恢复，也不占用当天的定时 nightly 执行标记。
+ * 扫描所有已配置的存储源，等待新视频资产处理完成后执行全库视频去重。
+ * 不触发脚本爬虫或恢复，也不占用当天的定时 nightly 执行标记。
  * 任务已在跑或已排队时，后端会拒绝重复触发。
  */
 export type MaintenanceJobStatus = {
@@ -1185,6 +1185,7 @@ export type TelegramStatus = {
   connection: {
     enabled: boolean; state: string; botId: string; username: string; error: string;
     lastPoll: string; lastMessage: string; cacheAvailableBytes: number;
+    diskReserveBytes?: number;
     notificationFailures: number; config: TelegramConfig;
   };
 };

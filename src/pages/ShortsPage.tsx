@@ -3164,18 +3164,11 @@ function formatClock(seconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** 识别云盘缩写名称 */
+/** 识别来源缩写名称 */
 function getDriveShortName(source: string): string {
   const s = source.toLowerCase();
-  if (s.includes("115")) return "115";
-  if (s.includes("123")) return "123";
-  if (s.includes("pikpak")) return "PikP";
-  if (s.includes("quark") || s.includes("夸克")) return "Quak";
-  if (s.includes("onedrive")) return "OneDrive";
-  if (s.includes("wopan") || s.includes("沃盘")) return "沃盘";
-  if (s.includes("guangyapan") || s.includes("guangya") || s.includes("光鸭")) return "光鸭";
-  if (s.includes("webdav") || s.includes("web dav")) return "WebDAV";
-  if (s.includes("localstorage") || s.includes("本地")) return "本地";
-  if (s.includes("spider") || s.includes("爬虫")) return "爬虫";
+  if (s.includes("telegram")) return "TG";
+  if (s.includes("localstorage") || s.includes("本地") || s.includes("upload")) return "本地";
+  if (s.includes("spider") || s.includes("爬虫") || s.includes("crawler")) return "爬虫";
   return source.substring(0, 4);
 }

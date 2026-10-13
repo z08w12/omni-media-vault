@@ -45,7 +45,7 @@ test("legacy theme page route redirects to the admin landing page", () => {
   assert.doesNotMatch(appSource, /const ThemePage|import\("@\/admin\/ThemePage"\)/);
   assert.match(
     appSource,
-    /<Route path="theme" element=\{<Navigate to="\/admin\/drives" replace \/>\} \/>/
+    /<Route path="theme" element=\{<Navigate to="\/admin\/crawlers" replace \/>\} \/>/
   );
 });
 

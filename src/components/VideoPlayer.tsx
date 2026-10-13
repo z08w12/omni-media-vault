@@ -2476,7 +2476,7 @@ function mediaErrorMessage(error: MediaError | null) {
     case MediaError.MEDIA_ERR_DECODE:
       return "视频编码无法解码，可尝试换用兼容的浏览器。";
     case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return "浏览器未能加载视频源，可能是网盘连接、地址失效或视频格式问题。";
+      return "浏览器未能加载视频源，可能是媒体源连接、地址失效或视频格式问题。";
     default:
       return "视频源暂时无法播放，请重试或复制地址排查。";
   }

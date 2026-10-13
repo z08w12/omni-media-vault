@@ -1,28 +1,24 @@
 // Package nightly orchestrates the single nightly maintenance pipeline that
-// replaces the legacy scanLoop / crawlerLoop / crawler upload periodic loop.
+// replaces the legacy scanLoop / crawlerLoop / periodic loops.
 //
 // The full pipeline is fired once per day at the configured HH:mm. The admin
-// "扫描所有网盘" action uses TriggerScanAll and intentionally runs only the
-// cloud-scan and duplicate-maintenance stages.
+// scan-all action uses TriggerScanAll and intentionally runs only the
+// storage-scan, asset reconciliation, and duplicate-maintenance stages.
 //
-//	Phase 1: concurrently for each non-crawler cloud drive
+//	Phase 1: concurrently for each non-crawler storage drive
 //	           scan + delete-detection + enqueue thumb + enqueue preview video
 //	         wait for all scans, then all thumb / preview-video queues to be idle
 //	Phase 1b: reconcile generated thumbnails/previews against local storage
 //	          enqueue repaired pending rows and wait for their queues to drain
-//	Phase 1c: upload Telegram local videos to their configured cloud drive
 //	Phase 2: if any script crawler configured
 //	           crawl + enqueue preview video for new videos
 //	         wait until preview-video queues are idle
-//	Phase 3: crawler local video → cloud upload (single sweep, captcha cooldown still
-//	         honored within this call)
 //	Phase 4: scan crawler local directories and restore user-requested videos
 //	Phase 5: full-library duplicate video maintenance:
 //	         exact size+sampled_sha256, title/duration/thumbnail, then content-frame dedupe
 //
 // The pipeline runs until all phases finish, the process exits, or an admin
-// stop request cancels the run. Provider cooldowns may make a single phase take
-// a long time, so there is no fixed duration cutoff.
+// stop request cancels the run.
 //
 // State persistence: the date string of the most recent successfully started
 // run is stored in catalog.settings under the key "nightly.last_run_date".
@@ -641,7 +637,7 @@ func (r *Runner) runScanPhase(ctx context.Context, component, phase string) bool
 		}
 	}
 	if len(scanIDs) == 0 {
-		log.Printf("[%s] %s skipped: no cloud drives to scan", component, phase)
+		log.Printf("[%s] %s skipped: no storage drives to scan", component, phase)
 	} else {
 		log.Printf("[%s] %s: scanning %d drive(s) concurrently", component, phase, len(scanIDs))
 		var scans sync.WaitGroup

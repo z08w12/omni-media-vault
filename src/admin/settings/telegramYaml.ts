@@ -9,9 +9,6 @@ export const TELEGRAM_DEFAULTS = {
   telegramMaxFileSizeBytes: 4 * 1024 ** 3,
   telegramMaxPendingJobs: 100,
   telegramFetchTimeoutSeconds: 1800,
-  telegramUploadDriveId: "",
-  telegramUploadDirectory: "Telegram",
-  telegramUploadProxy: "",
 };
 
 export type TelegramDraft = typeof TELEGRAM_DEFAULTS;
@@ -25,9 +22,6 @@ export const TELEGRAM_YAML_KEYS: Record<TelegramField, string> = {
   telegramMaxFileSizeBytes: "max_file_size_bytes",
   telegramMaxPendingJobs: "max_pending_jobs",
   telegramFetchTimeoutSeconds: "fetch_timeout_seconds",
-  telegramUploadDriveId: "upload_drive_id",
-  telegramUploadDirectory: "upload_directory",
-  telegramUploadProxy: "upload_proxy",
 };
 export const TELEGRAM_FIELDS = Object.keys(
   TELEGRAM_YAML_KEYS,

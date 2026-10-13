@@ -55,20 +55,11 @@ export function VideoMetaHeader({ video }: Props) {
   );
 }
 
-// 根据 sourceLabel 识别网盘类型，用于胶囊配色。
+// 根据 sourceLabel 识别存储类型，用于胶囊配色。
 function sourceKindFromLabel(label: string): string {
   const value = label.toLowerCase();
-  if (value.includes("夸克") || value.includes("quark")) return "quark";
-  if (value.includes("115") || value.includes("p115")) return "p115";
-  if (value.includes("123") || value.includes("p123")) return "p123";
-  if (value.includes("pikpak")) return "pikpak";
-  if (value.includes("沃盘") || value.includes("wopan") || value.includes("联通"))
-    return "wopan";
-  if (value.includes("光鸭") || value.includes("guangyapan") || value.includes("guangya"))
-    return "guangyapan";
-  if (value.includes("onedrive") || value.includes("one drive")) return "onedrive";
-  if (value.includes("webdav") || value.includes("web dav")) return "webdav";
-  if (value.includes("本地") || value.includes("localstorage") || value.includes("local storage"))
-    return "localstorage";
+  if (value.includes("telegram")) return "telegram";
+  if (value.includes("本地") || value.includes("localstorage") || value.includes("local storage") || value.includes("upload")) return "localstorage";
+  if (value.includes("spider") || value.includes("爬虫") || value.includes("crawler")) return "crawler";
   return "";
 }

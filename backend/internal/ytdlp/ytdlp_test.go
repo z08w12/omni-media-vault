@@ -177,4 +177,135 @@ func TestFindCookiesFile(t *testing.T) {
 	}
 }
 
+func TestExtractTikTokVideoID(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantID    string
+		wantFound bool
+	}{
+		{
+			input:     "https://www.tiktok.com/@creator/video/7123456789012345678?is_from_webapp=1",
+			wantID:    "7123456789012345678",
+			wantFound: true,
+		},
+		{
+			input:     "Check this TikTok: https://vt.tiktok.com/ZS2xY7abc/ cool!",
+			wantID:    "ZS2xY7abc",
+			wantFound: true,
+		},
+		{
+			input:     "not a tiktok url",
+			wantID:    "",
+			wantFound: false,
+		},
+	}
+	for _, tt := range tests {
+		id, _, found := ExtractTikTokVideoID(tt.input)
+		if found != tt.wantFound || id != tt.wantID {
+			t.Errorf("ExtractTikTokVideoID(%q) = (%q, %v), want (%q, %v)", tt.input, id, found, tt.wantID, tt.wantFound)
+		}
+	}
+}
+
+func TestExtractDouyinVideoID(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantID    string
+		wantFound bool
+	}{
+		{
+			input:     "https://www.douyin.com/video/7234567890123456789",
+			wantID:    "7234567890123456789",
+			wantFound: true,
+		},
+		{
+			input:     "来看看这个：https://v.douyin.com/iJklmno/ 复制此链接",
+			wantID:    "iJklmno",
+			wantFound: true,
+		},
+	}
+	for _, tt := range tests {
+		id, _, found := ExtractDouyinVideoID(tt.input)
+		if found != tt.wantFound || id != tt.wantID {
+			t.Errorf("ExtractDouyinVideoID(%q) = (%q, %v), want (%q, %v)", tt.input, id, found, tt.wantID, tt.wantFound)
+		}
+	}
+}
+
+func TestExtractBilibiliVideoID(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantID    string
+		wantFound bool
+	}{
+		{
+			input:     "https://www.bilibili.com/video/BV1xx411c7xx?spm_id_from=333",
+			wantID:    "BV1xx411c7xx",
+			wantFound: true,
+		},
+		{
+			input:     "【视频】https://b23.tv/av123456",
+			wantID:    "av123456",
+			wantFound: true,
+		},
+	}
+	for _, tt := range tests {
+		id, _, found := ExtractBilibiliVideoID(tt.input)
+		if found != tt.wantFound || id != tt.wantID {
+			t.Errorf("ExtractBilibiliVideoID(%q) = (%q, %v), want (%q, %v)", tt.input, id, found, tt.wantID, tt.wantFound)
+		}
+	}
+}
+
+func TestExtractPlatformLink(t *testing.T) {
+	link, ok := ExtractPlatformLink("https://www.youtube.com/watch?v=dQw4w9WgXcQ #tag")
+	if !ok || link.Platform != "YouTube" || link.ID != "dQw4w9WgXcQ" {
+		t.Fatalf("ExtractPlatformLink youtube failed: %+v", link)
+	}
+
+	link, ok = ExtractPlatformLink("https://x.com/user/status/1838848123456789012")
+	if !ok || link.Platform != "X" || link.ID != "1838848123456789012" {
+		t.Fatalf("ExtractPlatformLink X failed: %+v", link)
+	}
+
+	link, ok = ExtractPlatformLink("https://www.tiktok.com/@video/video/7123456789012345678")
+	if !ok || link.Platform != "TikTok" || link.ID != "7123456789012345678" {
+		t.Fatalf("ExtractPlatformLink tiktok failed: %+v", link)
+	}
+
+	link, ok = ExtractPlatformLink("https://v.douyin.com/iJklmno/")
+	if !ok || link.Platform != "Douyin" || link.ID != "iJklmno" {
+		t.Fatalf("ExtractPlatformLink douyin failed: %+v", link)
+	}
+
+	link, ok = ExtractPlatformLink("https://www.bilibili.com/video/BV1xx411c7xx")
+	if !ok || link.Platform != "Bilibili" || link.ID != "BV1xx411c7xx" {
+		t.Fatalf("ExtractPlatformLink bilibili failed: %+v", link)
+	}
+
+	link, ok = ExtractPlatformLink("https://example.com/videos/stream.mp4")
+	if !ok || link.Platform != "Web" || link.Prefix != "url:" {
+		t.Fatalf("ExtractPlatformLink generic failed: %+v", link)
+	}
+}
+
+func TestFindPlatformCookiesFile(t *testing.T) {
+	dir := t.TempDir()
+	ytCookie := filepath.Join(dir, "cookies_youtube.txt")
+	defaultCookie := filepath.Join(dir, "cookies.txt")
+
+	_ = os.WriteFile(defaultCookie, []byte("default cookie"), 0600)
+	_ = os.WriteFile(ytCookie, []byte("youtube cookie"), 0600)
+
+	// YouTube uses specific cookie
+	if got := FindPlatformCookiesFile(dir, "YouTube"); got != ytCookie {
+		t.Errorf("YouTube cookie = %q, want %q", got, ytCookie)
+	}
+
+	// X falls back to default cookie when cookies_x.txt is absent
+	if got := FindPlatformCookiesFile(dir, "X"); got != defaultCookie {
+		t.Errorf("X cookie = %q, want %q", got, defaultCookie)
+	}
+}
+
 

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,6 +22,14 @@ var (
 	XStatusPattern = regexp.MustCompile(`(?i)https?://(?:www\.)?(?:x\.com|twitter\.com)/(?:(?:i/web|i)/status|[A-Za-z0-9_]{1,32}/status)/(?P<id>[0-9]{5,20})(?:/(?:video|photo)/[0-9]+)?(?:[?#][^\s]*)?`)
 	// YouTubePattern matches video and shorts URLs from youtube.com or youtu.be
 	YouTubePattern = regexp.MustCompile(`(?i)https?://(?:(?:www|m|music)\.)?(?:youtube\.com/(?:watch\?(?:[^ \t\r\n&]+&)*v=|shorts/|embed/|v/|live/)|youtu\.be/)(?P<id>[A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)`)
+	// TikTokPattern matches video URLs from tiktok.com, vt.tiktok.com, vm.tiktok.com
+	TikTokPattern = regexp.MustCompile(`(?i)https?://(?:(?:www|m|vt|vm)\.)?tiktok\.com/(?:@[\w.-]+/video/(?P<id>[0-9]{15,25})|(?P<short_id>[A-Za-z0-9_-]{5,30}))`)
+	// DouyinPattern matches video URLs from douyin.com or v.douyin.com
+	DouyinPattern = regexp.MustCompile(`(?i)https?://(?:(?:www\.)?douyin\.com/(?:video|note)/(?P<id>[0-9]{15,25})|v\.douyin\.com/(?P<short_id>[A-Za-z0-9_-]{5,30}))`)
+	// BilibiliPattern matches video URLs from bilibili.com or b23.tv
+	BilibiliPattern = regexp.MustCompile(`(?i)https?://(?:(?:www\.)?bilibili\.com/video/(?P<id>(?:BV|bv)[A-Za-z0-9]{10}|av[0-9]{1,12})|b23\.tv/(?P<short_id>[A-Za-z0-9]{5,20}))`)
+	// GenericURLPattern matches any standalone http/https URL
+	GenericURLPattern = regexp.MustCompile(`(?i)https?://[A-Za-z0-9][-A-Za-z0-9.]*\.[A-Za-z]{2,}(?::[0-9]+)?/[^\s<>"'{}|\\^]+`)
 	// HashtagPattern matches tags like #fun #news #中文
 	HashtagPattern = regexp.MustCompile(`(?i)(?:^|[^\w])#([\p{L}\p{N}_-]{1,32})`)
 )
@@ -79,6 +89,121 @@ func ExtractYouTubeVideoID(text string) (videoID, videoURL string, found bool) {
 		return "", "", false
 	}
 	return videoID, fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID), true
+}
+
+// ExtractTikTokVideoID parses text and returns the TikTok video/short ID and URL if found.
+func ExtractTikTokVideoID(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	match := TikTokPattern.FindStringSubmatch(text)
+	if len(match) == 0 {
+		return "", "", false
+	}
+	idIndex := TikTokPattern.SubexpIndex("id")
+	shortIndex := TikTokPattern.SubexpIndex("short_id")
+	if idIndex > 0 && idIndex < len(match) && match[idIndex] != "" {
+		videoID = match[idIndex]
+		return videoID, fmt.Sprintf("https://www.tiktok.com/@video/video/%s", videoID), true
+	}
+	if shortIndex > 0 && shortIndex < len(match) && match[shortIndex] != "" {
+		videoID = match[shortIndex]
+		return videoID, match[0], true
+	}
+	return "", "", false
+}
+
+// ExtractDouyinVideoID parses text and returns the Douyin video/short ID and URL if found.
+func ExtractDouyinVideoID(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	match := DouyinPattern.FindStringSubmatch(text)
+	if len(match) == 0 {
+		return "", "", false
+	}
+	idIndex := DouyinPattern.SubexpIndex("id")
+	shortIndex := DouyinPattern.SubexpIndex("short_id")
+	if idIndex > 0 && idIndex < len(match) && match[idIndex] != "" {
+		videoID = match[idIndex]
+		return videoID, fmt.Sprintf("https://www.douyin.com/video/%s", videoID), true
+	}
+	if shortIndex > 0 && shortIndex < len(match) && match[shortIndex] != "" {
+		videoID = match[shortIndex]
+		return videoID, match[0], true
+	}
+	return "", "", false
+}
+
+// ExtractBilibiliVideoID parses text and returns the Bilibili video ID and normalized URL if found.
+func ExtractBilibiliVideoID(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	match := BilibiliPattern.FindStringSubmatch(text)
+	if len(match) == 0 {
+		return "", "", false
+	}
+	idIndex := BilibiliPattern.SubexpIndex("id")
+	shortIndex := BilibiliPattern.SubexpIndex("short_id")
+	if idIndex > 0 && idIndex < len(match) && match[idIndex] != "" {
+		videoID = match[idIndex]
+		return videoID, fmt.Sprintf("https://www.bilibili.com/video/%s", videoID), true
+	}
+	if shortIndex > 0 && shortIndex < len(match) && match[shortIndex] != "" {
+		videoID = match[shortIndex]
+		return videoID, fmt.Sprintf("https://b23.tv/%s", videoID), true
+	}
+	return "", "", false
+}
+
+// ExtractGenericVideoURL extracts any standalone HTTP(S) URL and produces a stable ID.
+func ExtractGenericVideoURL(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	raw := GenericURLPattern.FindString(text)
+	if raw == "" {
+		return "", "", false
+	}
+	sum := sha256.Sum256([]byte(raw))
+	videoID = hex.EncodeToString(sum[:])[:16]
+	return videoID, raw, true
+}
+
+// PlatformLink holds parsed video link information across multiple platforms.
+type PlatformLink struct {
+	Platform string // "X", "YouTube", "TikTok", "Douyin", "Bilibili", "Web"
+	Prefix   string // "x:", "yt:", "tiktok:", "douyin:", "bilibili:", "url:"
+	ID       string
+	URL      string
+}
+
+// ExtractPlatformLink inspects text and returns the first recognized video platform link.
+func ExtractPlatformLink(text string) (*PlatformLink, bool) {
+	if id, u, ok := ExtractXStatusID(text); ok {
+		return &PlatformLink{Platform: "X", Prefix: "x:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractYouTubeVideoID(text); ok {
+		return &PlatformLink{Platform: "YouTube", Prefix: "yt:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractTikTokVideoID(text); ok {
+		return &PlatformLink{Platform: "TikTok", Prefix: "tiktok:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractDouyinVideoID(text); ok {
+		return &PlatformLink{Platform: "Douyin", Prefix: "douyin:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractBilibiliVideoID(text); ok {
+		return &PlatformLink{Platform: "Bilibili", Prefix: "bilibili:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractGenericVideoURL(text); ok {
+		return &PlatformLink{Platform: "Web", Prefix: "url:", ID: id, URL: u}, true
+	}
+	return nil, false
 }
 
 // ExtractHashtags extracts hashtags from caption or description text.
@@ -195,6 +320,40 @@ func FindCookiesFile(jobDir string) string {
 	return ""
 }
 
+// FindPlatformCookiesFile looks for platform-specific cookies first, falling back to cookies.txt.
+func FindPlatformCookiesFile(jobDir, platform string) string {
+	var specific string
+	switch strings.ToLower(platform) {
+	case "youtube":
+		specific = "cookies_youtube.txt"
+	case "x", "twitter":
+		specific = "cookies_x.txt"
+	case "tiktok":
+		specific = "cookies_tiktok.txt"
+	case "douyin", "抖音":
+		specific = "cookies_douyin.txt"
+	case "bilibili":
+		specific = "cookies_bilibili.txt"
+	}
+	if specific != "" {
+		candidates := []string{
+			filepath.Join(jobDir, specific),
+			filepath.Join("/opt/video-site-91", specific),
+			filepath.Join("/etc/yt-dlp", specific),
+			specific,
+		}
+		for _, c := range candidates {
+			if info, err := os.Stat(c); err == nil && !info.IsDir() && info.Size() > 0 {
+				if abs, err := filepath.Abs(c); err == nil {
+					return abs
+				}
+				return c
+			}
+		}
+	}
+	return FindCookiesFile(jobDir)
+}
+
 // DownloadVideo downloads the video from the supported public URL into jobDir.
 func DownloadVideo(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
 	return DownloadVideoWithProgress(ctx, videoURL, jobDir, maxSizeBytes, nil)
@@ -210,7 +369,7 @@ func DownloadXPostWithProgress(ctx context.Context, postURL, jobDir string, maxS
 	return DownloadVideoWithProgress(ctx, postURL, jobDir, maxSizeBytes, onProgress)
 }
 
-// DownloadVideoWithProgress downloads the video from a public platform URL (X, YouTube, etc.) and reports live progress.
+// DownloadVideoWithProgress downloads the video from a public platform URL (X, YouTube, TikTok, Douyin, Bilibili, etc.) and reports live progress.
 func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64, onProgress func(done, total int64)) ([]DownloadedVideo, error) {
 	if err := os.MkdirAll(jobDir, 0750); err != nil {
 		return nil, fmt.Errorf("创建下载目录失败: %w", err)
@@ -222,6 +381,12 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		platform = "X"
 	} else if strings.Contains(lowerURL, "youtube.com") || strings.Contains(lowerURL, "youtu.be") {
 		platform = "YouTube"
+	} else if strings.Contains(lowerURL, "tiktok.com") {
+		platform = "TikTok"
+	} else if strings.Contains(lowerURL, "douyin.com") {
+		platform = "抖音"
+	} else if strings.Contains(lowerURL, "bilibili.com") || strings.Contains(lowerURL, "b23.tv") {
+		platform = "Bilibili"
 	}
 
 	bin := BinaryPath()
@@ -232,6 +397,7 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		"--merge-output-format", "mp4",
 		"-o", outTmpl,
 		"--no-playlist",
+		"--no-write-cookies", // 防写回降级与防跨站污染保护
 		"--socket-timeout", "25",
 		"--retries", "3",
 		"--fragment-retries", "3",
@@ -240,7 +406,7 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		"--progress-template", "download:%(progress.downloaded_bytes)s/%(progress.total_bytes)s/%(progress.total_bytes_estimate)s",
 		"--print-json",
 	}
-	if cookiesFile := FindCookiesFile(jobDir); cookiesFile != "" {
+	if cookiesFile := FindPlatformCookiesFile(jobDir, platform); cookiesFile != "" {
 		args = append(args, "--cookies", cookiesFile)
 	}
 	if maxSizeBytes > 0 {

@@ -128,6 +128,15 @@ func (m *Manager) LiveSettings() LiveSettings {
 	return liveSettingsFromConfig(m.current)
 }
 
+func (m *Manager) RemoteUploadSettings() RemoteUpload {
+	if m == nil {
+		return RemoteUpload{DiskReserveBytes: 1 << 30, IdleTimeoutSeconds: 120}
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.current.RemoteUpload
+}
+
 // SetApply installs the callback used to propagate hot-reloadable fields. It
 // immediately supplies the current snapshot, which prevents consumers from
 // starting with a stale default when wiring order changes.
@@ -479,6 +488,7 @@ func removeLiveDocumentValues(document any) {
 	removeNestedValue(root, "generation", "preview_concurrency")
 	removeNestedValue(root, "generation", "thumbnail_concurrency")
 	removeNestedValue(root, "generation", "fingerprint_concurrency")
+	removeNestedValue(root, "remote_upload", "disk_reserve_bytes")
 }
 
 func removeNestedValue(root map[string]any, section, key string) {

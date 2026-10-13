@@ -23,6 +23,7 @@ export type SettingsDraft = TelegramDraft & {
   previewConcurrency: number;
   thumbnailConcurrency: number;
   fingerprintConcurrency: number;
+  remoteUploadDiskReserveBytes: number;
 };
 
 export type VisualField = keyof SettingsDraft;
@@ -37,6 +38,7 @@ export const DEFAULT_DRAFT: SettingsDraft = {
   previewConcurrency: 1,
   thumbnailConcurrency: 1,
   fingerprintConcurrency: 1,
+  remoteUploadDiskReserveBytes: 1073741824,
 };
 
 export const MIN_GENERATION_CONCURRENCY = 1;
@@ -194,6 +196,29 @@ function draftFromDocument(document: ReturnType<typeof configDocument>): Setting
     }
     builtinTagsEnabled = configuredBuiltinTags;
   }
+
+  const remoteUploadNode = document.get("remote_upload", true);
+  if (
+    remoteUploadNode !== undefined &&
+    remoteUploadNode !== null &&
+    !isMap(remoteUploadNode) &&
+    !(isScalar(remoteUploadNode) && remoteUploadNode.value === null)
+  ) {
+    throw new Error("remote_upload 必须是映射对象");
+  }
+  const configuredReserve = document.getIn(["remote_upload", "disk_reserve_bytes"]);
+  let remoteUploadDiskReserveBytes = DEFAULT_DRAFT.remoteUploadDiskReserveBytes;
+  if (configuredReserve !== undefined && configuredReserve !== null) {
+    if (
+      typeof configuredReserve !== "number" ||
+      !Number.isInteger(configuredReserve) ||
+      configuredReserve <= 0
+    ) {
+      throw new Error("remote_upload.disk_reserve_bytes 必须是正整数");
+    }
+    remoteUploadDiskReserveBytes = configuredReserve;
+  }
+
   return {
     ...telegramDraftFromDocument(document),
     previewEnabled,
@@ -204,6 +229,7 @@ function draftFromDocument(document: ReturnType<typeof configDocument>): Setting
     previewConcurrency,
     thumbnailConcurrency,
     fingerprintConcurrency,
+    remoteUploadDiskReserveBytes,
   };
 }
 
@@ -945,6 +971,20 @@ export function applyVisualFields(
     );
   }
 
+  if (fields.has("remoteUploadDiskReserveBytes")) {
+    const document = configDocument(updated);
+    updated = applySourceEdits(
+      updated,
+      integerSettingEdits(
+        updated,
+        document,
+        "remote_upload",
+        "disk_reserve_bytes",
+        draft.remoteUploadDiskReserveBytes
+      )
+    );
+  }
+
   for (const field of TELEGRAM_FIELDS) {
     if (!fields.has(field)) continue;
     updated = applySourceEdits(updated, telegramSettingEdits(
@@ -983,6 +1023,9 @@ export function changedVisualFields(saved: SettingsDraft, draft: SettingsDraft) 
   }
   if (saved.fingerprintConcurrency !== draft.fingerprintConcurrency) {
     fields.add("fingerprintConcurrency");
+  }
+  if (saved.remoteUploadDiskReserveBytes !== draft.remoteUploadDiskReserveBytes) {
+    fields.add("remoteUploadDiskReserveBytes");
   }
   for (const field of TELEGRAM_FIELDS) {
     if (saved[field] !== draft[field]) fields.add(field);

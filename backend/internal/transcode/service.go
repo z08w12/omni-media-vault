@@ -311,6 +311,7 @@ func (s *Service) executeTranscode(ctx context.Context, videoID string) error {
 		"-hide_banner",
 		"-loglevel", "error",
 		"-y",
+		"-threads", "2",
 		"-i", sourcePath,
 		"-c:v", "libx264",
 		"-preset", "medium",
@@ -402,28 +403,7 @@ func (s *Service) executeTranscode(ctx context.Context, videoID string) error {
 		newFileID = baseID + ".mp4"
 
 	default:
-		// Remote drive with Uploader capability
-		if s.cfg.GetDrive != nil {
-			if drv, ok := s.cfg.GetDrive(v.DriveID); ok && drv != nil {
-				if uploader, ok := drv.(drives.Uploader); ok {
-					f, err := os.Open(tempDest)
-					if err != nil {
-						return fmt.Errorf("open transcoded file: %w", err)
-					}
-					defer f.Close()
-					newName := strings.TrimSuffix(v.FileName, "."+v.Ext) + ".mp4"
-					uploadedID, err := uploader.Upload(ctx, v.ParentID, newName, f, newStat.Size())
-					if err != nil {
-						return fmt.Errorf("upload transcoded file to drive %s: %w", v.DriveID, err)
-					}
-					newFileID = uploadedID
-					// Remove old source on remote drive
-					if remover, ok := drv.(drives.Remover); ok {
-						_ = remover.Remove(ctx, v.FileID)
-					}
-				}
-			}
-		}
+		return fmt.Errorf("storage kind %s does not support transcode", v.DriveID)
 	}
 
 	// 6. Update video catalog entry

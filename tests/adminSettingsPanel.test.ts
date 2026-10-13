@@ -97,7 +97,7 @@ test("configuration panel groups typed fields from the real YAML document", () =
 test("media generation exposes three independent global concurrency controls", () => {
   assert.match(pageSource, /id: "config-preview"/);
   assert.match(pageSource, /title="媒体生成"/);
-  assert.match(pageSource, /控制视频资源生成的并发数，请根据服务器性能和网盘API风控调整，如果性能允许推荐 1-3-1/);
+  assert.match(pageSource, /控制视频资源生成的并发数，请根据服务器性能调整，如果性能允许推荐 1-3-1/);
   for (const label of ["封面并发", "预览并发", "视频指纹并发"]) {
     assert.ok(pageSource.includes(`label: "${label}"`));
   }

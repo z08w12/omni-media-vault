@@ -49,7 +49,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 	if !s.Allowed(source.SenderID) {
 		return out, &mediaimport.SourceError{Message: "发送者已不在允许用户列表中"}
 	}
-	isExternal := strings.HasPrefix(source.UniqueID, "x:") || strings.HasPrefix(source.UniqueID, "yt:")
+	isExternal := isExternalSource(source.UniqueID)
 	size := source.Size
 	if !isExternal {
 		if err := validateVideoSize(size, s.cfg.MaxFileSizeBytes); err != nil {
@@ -87,17 +87,18 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 		return acquiredFile(source, local, destination, info.Size()), nil
 	}
 	if isExternal {
+		// 检查本地可用存储配额（预留安全磁盘空间）
+		if s.cfg.LocalFilesRoot != "" {
+			reserve := s.getReserve()
+			if avail, err := mediaimport.AvailableBytes(s.cfg.LocalFilesRoot); err == nil && avail > 0 && avail < reserve {
+				return out, &mediaimport.SourceError{Message: fmt.Sprintf("服务器可用存储空间不足 (%s)，低于预留阈值 (%s)", formatBytes(avail), formatBytes(reserve))}
+			}
+		}
+		cleanStaleTempJobs(filepath.Join(s.cfg.LocalFilesRoot, "temp"), time.Hour)
+
 		tempJobDir := filepath.Join(s.cfg.LocalFilesRoot, "temp", j.ID)
 		defer os.RemoveAll(tempJobDir)
-		stageName := "external_download"
-		platformName := "外部"
-		if strings.HasPrefix(source.UniqueID, "x:") {
-			stageName = "x_download"
-			platformName = "X"
-		} else if strings.HasPrefix(source.UniqueID, "yt:") {
-			stageName = "youtube_download"
-			platformName = "YouTube"
-		}
+		stageName, platformName := externalPlatformInfo(source.UniqueID)
 		if err = progress(stageName, 0, 0); err != nil {
 			return out, err
 		}
@@ -181,8 +182,9 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 		return acquiredFile(source, local, destination, v.Size), nil
 	}
 	free, err := mediaimport.AvailableBytes(s.cfg.LocalFilesRoot)
-	if err != nil || free < s.reserve || size > free-s.reserve {
-		return out, &mediaimport.SourceError{Message: "TG 共享目录空间不足或不可用", WaitForAvailability: true}
+	reserve := s.getReserve()
+	if err != nil || free < reserve || size > free-reserve {
+		return out, &mediaimport.SourceError{Message: fmt.Sprintf("TG 共享目录空间不足或低于预留阈值 (%s)", formatBytes(reserve)), WaitForAvailability: true}
 	}
 	if err = progress("telegram_download", 0, source.Size); err != nil {
 		return out, err
@@ -386,4 +388,58 @@ func findDirectoryBytes(dir string) int64 {
 		return nil
 	})
 	return total
+}
+
+func isExternalSource(uniqueID string) bool {
+	return strings.HasPrefix(uniqueID, "x:") ||
+		strings.HasPrefix(uniqueID, "yt:") ||
+		strings.HasPrefix(uniqueID, "tiktok:") ||
+		strings.HasPrefix(uniqueID, "douyin:") ||
+		strings.HasPrefix(uniqueID, "bilibili:") ||
+		strings.HasPrefix(uniqueID, "url:")
+}
+
+func externalPlatformInfo(uniqueID string) (stageName, platformName string) {
+	switch {
+	case strings.HasPrefix(uniqueID, "x:"):
+		return "x_download", "X"
+	case strings.HasPrefix(uniqueID, "yt:"):
+		return "youtube_download", "YouTube"
+	case strings.HasPrefix(uniqueID, "tiktok:"):
+		return "tiktok_download", "TikTok"
+	case strings.HasPrefix(uniqueID, "douyin:"):
+		return "douyin_download", "抖音"
+	case strings.HasPrefix(uniqueID, "bilibili:"):
+		return "bilibili_download", "Bilibili"
+	default:
+		return "external_download", "外部"
+	}
+}
+
+func cleanStaleTempJobs(tempRootDir string, maxAge time.Duration) {
+	entries, err := os.ReadDir(tempRootDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-maxAge)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(tempRootDir, entry.Name()))
+		}
+	}
+}
+
+func formatBytes(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	} else if bytes < 1024*1024 {
+		return fmt.Sprintf("%.1f KiB", float64(bytes)/1024)
+	} else if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MiB", float64(bytes)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GiB", float64(bytes)/(1024*1024*1024))
 }

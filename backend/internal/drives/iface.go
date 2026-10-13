@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// Drive 是多家网盘统一抽象。上层不区分盘，只区分 Kind。
+// Drive 是媒体存储统一抽象。上层不区分底层存储结构，只区分 Kind。
 type Drive interface {
-	// Kind 返回驱动代号："quark" / "p115" / "p123" / "pikpak" / "wopan" / "guangyapan" / "onedrive" / "googledrive" / "webdav" / "localstorage"
+	// Kind 返回驱动代号："localstorage" / "telegramstorage" / "localupload" / "scriptcrawler"
 	Kind() string
 
 	// ID 返回该盘在 catalog 中的唯一标识

@@ -212,6 +212,14 @@ function TelegramWorkspace() {
                 {connection ? formatBytes(connection.cacheAvailableBytes) : "—"}
               </dd>
             </div>
+            <div>
+              <dt>预留阈值</dt>
+              <dd>
+                <Link to="/admin/settings?section=telegram" title="前往配置面板修改预留阈值">
+                  {connection?.diskReserveBytes ? formatBytes(connection.diskReserveBytes) : "1.0 GiB"}
+                </Link>
+              </dd>
+            </div>
           </dl>
           {!!connection?.notificationFailures && (
             <p className="tg-note">

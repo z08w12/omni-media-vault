@@ -105,7 +105,7 @@ export function TelegramSettingsSection({
             className="tg-setting-group"
             aria-labelledby="tg-download-title"
           >
-            <h3 id="tg-download-title">下载设置</h3>
+            <h3 id="tg-download-title">下载与存储设置</h3>
             <div className="tg-fields tg-fields--thirds">
               <label>
                 文件上限（GiB）
@@ -121,6 +121,29 @@ export function TelegramSettingsSection({
                       Math.round(Number(e.target.value) * 1024 ** 3),
                     )
                   }
+                />
+              </label>
+              <label>
+                预留空间阈值（GiB）
+                <input
+                  type="number"
+                  min="0.1"
+                  max="1024"
+                  step="0.5"
+                  value={
+                    Math.round(
+                      (draft.remoteUploadDiskReserveBytes / 1024 ** 3) * 100,
+                    ) / 100
+                  }
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val > 0) {
+                      onChange(
+                        "remoteUploadDiskReserveBytes",
+                        Math.round(val * 1024 ** 3),
+                      );
+                    }
+                  }}
                 />
               </label>
               <label>

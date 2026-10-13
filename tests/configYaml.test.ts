@@ -473,3 +473,34 @@ test("removed per-drive and combined settings do not control the independent bud
   assert.equal(parseConfig(updated).draft.previewConcurrency, 3);
   assert.match(updated, /preview_concurrency: 3/);
 });
+
+test("disk reserve threshold defaults to 1 GiB and round-trips through visual edits", () => {
+  assert.equal(DEFAULT_DRAFT.remoteUploadDiskReserveBytes, 1073741824);
+  assert.equal(parseConfig("").draft.remoteUploadDiskReserveBytes, 1073741824);
+  assert.equal(
+    parseConfig("remote_upload: { disk_reserve_bytes: 2147483648 }").draft
+      .remoteUploadDiskReserveBytes,
+    2147483648
+  );
+  assert.throws(
+    () => parseConfig("remote_upload: { disk_reserve_bytes: 0 }"),
+    /remote_upload\.disk_reserve_bytes 必须是正整数/
+  );
+  assert.throws(
+    () => parseConfig("remote_upload: { disk_reserve_bytes: '1073741824' }"),
+    /remote_upload\.disk_reserve_bytes 必须是正整数/
+  );
+
+  const source = "# keep\nremote_upload:\n  disk_reserve_bytes: 1073741824 # 1 GiB\n  idle_timeout_seconds: 120\n";
+  const before = parseConfig(source).draft;
+  const draft = { ...before, remoteUploadDiskReserveBytes: 3221225472 };
+  const fields = changedVisualFields(before, draft);
+  assert.deepEqual([...fields], ["remoteUploadDiskReserveBytes"]);
+  const updated = applyVisualFields(source, draft, fields);
+  assert.equal(parseConfig(updated).draft.remoteUploadDiskReserveBytes, 3221225472);
+  assert.equal(
+    configDocument(updated).getIn(["remote_upload", "idle_timeout_seconds"]),
+    120
+  );
+  assert.match(updated, /disk_reserve_bytes: 3221225472 # 1 GiB/);
+});

@@ -32,12 +32,14 @@ type Status struct {
 	LastPoll             time.Time       `json:"lastPoll"`
 	LastMessage          time.Time       `json:"lastMessage"`
 	CacheAvailableBytes  int64           `json:"cacheAvailableBytes"`
+	DiskReserveBytes     int64           `json:"diskReserveBytes"`
 	NotificationFailures int             `json:"notificationFailures"`
 	Config               config.Telegram `json:"config"`
 }
 type Service struct {
 	wakeImports      func()
 	statusTimezone   func() string // Optional live timezone provider, assigned before Start.
+	statusReserve    func() int64  // Optional live disk reserve provider.
 	cfg              config.Telegram
 	token            string
 	runCtx           context.Context
@@ -95,10 +97,27 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
+func (s *Service) getReserve() int64 {
+	s.mu.RLock()
+	fn := s.statusReserve
+	reserve := s.reserve
+	s.mu.RUnlock()
+	if fn != nil {
+		if r := fn(); r > 0 {
+			return r
+		}
+	}
+	if reserve > 0 {
+		return reserve
+	}
+	return 1 << 30
+}
+
 func (s *Service) Status() Status {
 	s.mu.RLock()
 	out := s.status
 	s.mu.RUnlock()
+	out.DiskReserveBytes = s.getReserve()
 	if n, err := mediaimport.AvailableBytes(s.cfg.LocalFilesRoot); err == nil {
 		out.CacheAvailableBytes = n
 	}
@@ -356,10 +375,14 @@ func (s *Service) prepareImport(ctx context.Context, u update) (catalog.Telegram
 			} else if s.Allowed(m.From.ID) {
 				r.Response = responseUnsupported
 				allText := strings.TrimSpace(m.Text + " " + m.Caption)
-				if statusID, xURL, found := ytdlp.ExtractXStatusID(allText); found {
-					uniqueID := "x:" + statusID
+				if link, found := ytdlp.ExtractPlatformLink(allText); found {
+					uniqueID := link.Prefix + link.ID
 					if existingID, err := s.cat.TelegramVideoID(ctx, botID, uniqueID); err == nil && existingID != "" {
-						r.Response = "✅ 这个 X 帖子已经转存过"
+						dupLabel := "视频"
+						if link.Platform == "X" {
+							dupLabel = "帖子"
+						}
+						r.Response = fmt.Sprintf("✅ 这个 %s %s已经转存过", link.Platform, dupLabel)
 					} else {
 						r.Response = ""
 						source = &catalog.TelegramSource{
@@ -367,30 +390,12 @@ func (s *Service) prepareImport(ctx context.Context, u update) (catalog.Telegram
 							SenderID: m.From.ID,
 							FileID:   uniqueID,
 							UniqueID: uniqueID,
-							FileName: xURL,
+							FileName: link.URL,
 							Size:     0,
 							MIME:     "video/mp4",
 						}
-						title = "X-" + statusID
-						tags = append([]string{"X"}, ytdlp.ExtractHashtags(allText)...)
-					}
-				} else if videoID, ytURL, found := ytdlp.ExtractYouTubeVideoID(allText); found {
-					uniqueID := "yt:" + videoID
-					if existingID, err := s.cat.TelegramVideoID(ctx, botID, uniqueID); err == nil && existingID != "" {
-						r.Response = "✅ 这个 YouTube 视频已经转存过"
-					} else {
-						r.Response = ""
-						source = &catalog.TelegramSource{
-							BotID:    botID,
-							SenderID: m.From.ID,
-							FileID:   uniqueID,
-							UniqueID: uniqueID,
-							FileName: ytURL,
-							Size:     0,
-							MIME:     "video/mp4",
-						}
-						title = "YouTube-" + videoID
-						tags = append([]string{"YouTube"}, ytdlp.ExtractHashtags(allText)...)
+						title = link.Platform + "-" + link.ID
+						tags = append([]string{link.Platform}, ytdlp.ExtractHashtags(allText)...)
 					}
 				} else {
 					file := videoMedia(m)

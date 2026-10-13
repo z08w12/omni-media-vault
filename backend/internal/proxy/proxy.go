@@ -627,12 +627,14 @@ func driveLabel(kind string) string {
 	case "localstorage", "local-upload", "telegram-local":
 		return "本地存储"
 	default:
-		return "网盘"
+		return "本地存储"
 	}
 }
 
 // ServeLocal 服务本地预览视频文件
 func (p *Proxy) ServeLocal(w http.ResponseWriter, r *http.Request, path string) {
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFile(w, r, path)
 }
 
