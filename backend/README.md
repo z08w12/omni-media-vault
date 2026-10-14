@@ -49,16 +49,17 @@ omni-media-vault/
 ```
 cmd/server/                 入口：加载配置、初始化存储、注册 chi 路由、启动各工作池协程
 internal/
-  api/                      REST 路由：前台浏览、播放、图集、短视频流、一次性分享；后台管理与配置接口
+  api/                      REST 路由：前台浏览、播放、图集、短视频流、一次性分享；后台管理、Cookie 管理与 MTProto 配置接口
   auth/                     管理员登录、会话保持、密码 bcrypt 校验、登录失败连续防爆破封禁
   catalog/                  SQLite 元数据持久层：视频/图集、存储空间、分类与标签体系、用户管理、去重索引
   config/                   YAML 运行时配置管理、动态热更新与磁盘预留配额（DiskReserveBytes）
+  cookiemanager/            平台 Cookie 全生命周期管理：Netscape 格式预检、.bak 镜像安全备份与回滚、平台级物理隔离
   drives/                   存储驱动抽象层：
     localstorage/           服务器本地已有媒体目录扫描挂载
     localupload/            Web 站内上传的专用存储（落在 data/uploads/）
     telegramstorage/        Telegram 转存与多平台抓取的专属存储库（data/telegram/library/）
     scriptcrawler/          自定义 Python 爬虫产物落地存储
-  telegram/                 Telegram 机器人交互会话、Local Bot API 高速传输对接、实时进度推送、图集与 #Hashtag 解析
+  telegram/                 Telegram 机器人会话、Local Bot API (2GB) 高速模式、MTProto 客户端协议桥接、受限频道解析、相册图文全量拆解入库
   ytdlp/                    多平台视频提取引擎（X、YouTube、TikTok、抖音、B站、通用网页）、Cookie 自动隔离与反爬签名插件
   transcode/                FFmpeg 异步转码服务、浏览器解码兼容性检测（HEVC 探测）与转码任务队列
   scanner/                  本地目录只读遍历、存在性快照生成、Catalog 增量对账与文件名解析
@@ -145,7 +146,7 @@ flowchart TB
 
 | 路径 | 触发方式 | 处理机制与核心能力 |
 |---|---|---|
-| **Telegram & 多平台转存** | 向 Telegram Bot 发送视频、照片或外部链接 | 自动识别：<br>1. **Telegram 原生媒体**：经由 Local Bot API 高速传输（支持最大 2GB 文件）；相册（Media Group）自动合并批量归档。<br>2. **多平台视频链接**：智能匹配 X/Twitter、YouTube、TikTok、抖音、B站等，调用 `yt-dlp` 高画质下载并注入独立 Cookie，实时会话推送进度。<br>3. 自动提取 `#话题` 打标，落盘至 `data/telegram/library/`。 |
+| **Telegram & 多平台转存** | 向 Telegram Bot 发送视频、照片或外部链接 | 自动识别：<br>1. **Telegram 原生媒体**：经由 Local Bot API 高速传输（支持最大 2GB 文件）；相册（Media Group）自动合并批量归档。<br>2. **Telegram 频道/群组链接（MTProto 客户端协议）**：通过底层 Telethon 官方客户端协议高速拉取成人/受限频道内容，支持相册（Media Group）图文全量拆解入库，将动态内的所有图片与视频分别独立保存。<br>3. **多平台视频链接**：智能匹配 X/Twitter、YouTube、TikTok、抖音、B站等，调用 `yt-dlp` 高画质下载并注入独立 Cookie，实时会话推送进度。<br>4. 自动提取 `#话题` 打标，落盘至 `data/telegram/library/`。 |
 | **本地目录扫描** | 定时维护流水线、后台点击「重新扫描」 | 对挂载目录进行只读快照扫描，与 Catalog 对账补齐新入库文件；对已移除文件执行连续缺失确认机制。 |
 | **网页直接上传** | Web 前台 `POST /api/upload` | 写入 `data/uploads/`，校验文件流与容器类型，直接入库并实时触发封面与预览生成。 |
 | **视频直链后台下载** | 管理后台「视频直链」下载 | 服务端安全拨号下载（防 SSRF 与私网回环拦截），执行连续写入与磁盘预留配额检查，下载完毕自动入库。 |
@@ -161,9 +162,9 @@ flowchart TB
 
 ---
 
-### 3. 多平台视频解析与 Cookie 隔离架构
+### 3. 多平台视频解析与 Cookie 管理架构
 
-系统内置对 `yt-dlp` 的深度定制集成（`internal/ytdlp`）：
+系统内置对 `yt-dlp` 的深度定制集成（`internal/ytdlp`）与平台 Cookie 管理器（`internal/cookiemanager`）：
 - **平台匹配与标准化**：
   - `x.com` / `twitter.com`：推文视频与媒体提取；
   - `youtube.com` / `youtu.be`：长视频与 Shorts 短视频；
@@ -171,6 +172,11 @@ flowchart TB
   - `douyin.com` / `v.douyin.com`：集成专属签名插件与反爬机制，完整支持短链接与长链接无水印下载；
   - `bilibili.com` / `b23.tv`：支持 BV 号、av 号以及 `b23.tv` 短链接解析；
   - 通用 URL 解析器：兼容其他主流流媒体网页视频。
+- **后台 Cookie 全生命周期管理**：
+  - 开放 RESTful 管理接口（`GET /admin/api/cookies`、`PUT /admin/api/cookies/{platform}`、`POST /admin/api/cookies/{platform}/restore` 等）；
+  - 自动持久化至受保护的 `data/cookies/` 目录，并双向兼容 `/opt/video-site-91/` 原生环境；
+  - **格式严格预检**：内置 Netscape 语法解析预检，拦截 HTML/JSON 异常文本；
+  - **安全备份镜像**：变更前自动保留 `.bak` 只读镜像，提供一键回滚能力。
 - **Cookie 平台级安全隔离机制**：
   - 针对不同流媒体平台的反风控策略，系统在调用底层解析引擎时对 Cookie 进行**按域名自动过滤与隔离**，为每个抓取任务生成独立的临时隔离凭据；
   - 避免因单个平台的抓取行为污染或串扰其他平台的 Cookie 凭据，极大降低账号被封禁或验证码拦截的风险。

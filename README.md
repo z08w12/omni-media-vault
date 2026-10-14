@@ -11,10 +11,14 @@
 ## 🌟 核心功能特性
 
 ### 1. 全平台视频转存与媒体采集
-- **Telegram 全媒体高速转存**：
-  - 通过 Telegram 机器人，不仅支持转存视频文件，还全面支持**单张照片与多图相册（Media Group）**自动批量下载与归档。
-  - 支持本地 Telegram Bot API 高速模式，突破官方 Bot API 的 20MB/50MB 限制，最大支持 **2GB** 巨幅大文件下载。
-  - 机器人交互会话实时推送下载与导入进度（包含下载百分比、文件大小、当前速率及耗时预估）。
+- **Telegram 全媒体高速转存（Bot API + MTProto User API 双通道引擎）**：
+  - **原生机器人高速转存**：通过 Telegram 机器人直接发送视频或照片，全面支持**单张照片与多图相册（Media Group）**自动批量下载与归档。
+  - **本地 Bot API 高速模式**：突破官方公网 Bot API 的 20MB/50MB 限制，最大支持 **2GB** 巨幅大文件下载。
+  - **MTProto 客户端协议（Telethon 原生通道）**：
+    - 支持直接向机器人发送频道/群组消息链接（如 `https://t.me/<channel>/<msg_id>` 或私密群组 `https://t.me/c/<id>/<msg_id>`）；
+    - **绕过敏感/受限内容限制**：彻底突破 Telegram 网页端“Please open Telegram to view this post”的限制，以真实客户端 RPC 协议高速拉取成人/受限频道内容；
+    - **相册（Media Group）图文全量归档**：智能侦测相册 `grouped_id`，自动将该条动态内的**全部高清图片与原片视频完整转存并分别入库**，前台直出高清画廊与独立视频卡片。
+  - **全流程实时进度推送**：交互会话实时推送下载与导入进度（包含百分比、文件大小、速率与耗时预估）。
 - **多平台视频一键提取（基于 yt-dlp 深度定制）**：
   - 向 Telegram 机器人直接发送视频链接，后台自动调用定制化 `yt-dlp` 解析引擎并下载最高画质视频。
   - **主流平台原生支持**：
@@ -24,10 +28,14 @@
     - **抖音 (Douyin)**：集成专属签名插件与反爬机制，完整支持 `v.douyin.com` 短链接与长链接无水印下载
     - **Bilibili (B站)**：支持 BV 号、av 号以及 `b23.tv` 短链接解析
     - **通用网页视频**：兼容支持 Instagram、快手等几乎所有 yt-dlp 支持的流媒体站点
-- **Cookie 平台级安全隔离机制**：
-  - 支持在后台配置 Cookie，内置自动按域名过滤机制，实现不同平台间 Cookie 的物理隔离与防串扰，有效降低账号风控与封禁风险。
+- **Cookie 全生命周期管理与安全隔离体系**：
+  - **后台可视化 Cookie 管理中心**：配置面板提供独立的「Cookie 管理」专区，支持直观查看各平台 Cookie 的状态、有效条数、大小、SHA-256 及修改时间；
+  - **在线代码编辑与文件上传**：提供 Monospace 等宽代码编辑器支持在线修改，支持拖拽/选择直接上传本地 `cookies.txt`；
+  - **安全备份与一键回滚**：每次保存前自动生成 `.bak` 镜像备份，支持误修改时一键还原上一版本；
+  - **格式严格预检**：内置 Netscape 格式预检校验器，自动拦截用户误粘贴的 HTML 登录过期页或 JSON 接口数据，避免爬虫崩溃；
+  - **平台级安全隔离机制**：解析抓取时自动按目标域名生成临时凭据物理隔离，避免跨平台串扰，大幅降低账号风控与封禁风险。
 - **智能标签与分类归档**：
-  - 自动打标系统来源标签（如 `TG`、`X`、`YouTube`、`抖音`、`TikTok`、`Bilibili`、`图片` 等）。
+  - 自动打标系统来源标签（如 `Telegram`、`X`、`YouTube`、`抖音`、`TikTok`、`Bilibili`、`图片` 等）。
   - 自动从 Telegram 配文、视频标题及推文/网页描述中提取 `#话题`，秒级转换为分类标签，支持秒级筛选与检索。
 
 ### 2. 沉浸式多媒体浏览体验
@@ -52,6 +60,8 @@
 
 ### 4. 现代化管理后台与安全体系
 - **全功能管理后台**：集中化管理视频与图集、爬虫采集任务、Telegram 机器人状态、系统日志、系统设置、标签与用户权限。
+- **平台 Cookie 可视化管理中心**：专设 Cookie 管理面板，支持 YouTube、抖音、TikTok、X 等多平台凭据的查看、在线代码编辑、本地上传、格式预检与一键回滚。
+- **Telegram MTProto 客户端协议助手**：后台直连测试与交互式手机验证码登录生成 Session，轻松开启受限/敏感频道媒体与图文相册全量提取。
 - **一次性分享（阅后即焚）**：生成的分享链接仅能打开播放一次，无需登录即可观看，保护私密性。
 - **企业级鉴权与防爆破**：密码采用加盐 `bcrypt` 存储，无预置后门；内置 30 分钟内连续失败 3 次自动封禁 IP 机制；网络请求防 SSRF 与安全沙箱隔离。
 - **自定义爬虫扩展**：支持接入标准化 Python 爬虫脚本，定时增量抓取流媒体资源。
@@ -134,12 +144,14 @@ sudo bash deploy.sh update
 - 运行配置文件：`/opt/video-site-91/config.yaml`
 - SQLite 数据库：`/opt/video-site-91/data/video-site.db`
 - 转存媒体库：`/opt/video-site-91/data/telegram/library/`
+- 各平台受保护 Cookie 目录：`/opt/video-site-91/data/cookies/`
 - 缩略图、预览片段、转码临时目录：`/opt/video-site-91/data/`
 
 **Docker Compose 部署**
 - 运行配置文件：`./data/config.yaml`
 - 数据库文件：`./data/video-site.db`
 - 转存媒体库：`./data/telegram/library/`
+- 各平台 Cookie 目录：`./data/cookies/`
 
 ---
 
@@ -147,9 +159,9 @@ sudo bash deploy.sh update
 
 ### 1. 准备 Telegram 相关凭据
 - **Bot Token**：在 Telegram 中向官方 `@BotFather` 发送 `/newbot` 指令创建机器人并获取 Token。
-- **API ID 与 API Hash**（用于启用本地高速 API，突破 20MB/50MB 限制）：登录 [my.telegram.org](https://my.telegram.org)，在 *API development tools* 中申请。
+- **API ID 与 API Hash**（用于启用本地高速 API 或 MTProto 客户端协议）：登录 [my.telegram.org](https://my.telegram.org)，在 *API development tools* 中申请。
 
-### 2. 部署本地 Telegram Bot API 服务（支持 2GB 大文件高速转存）
+### 2. 部署本地 Telegram Bot API 服务（可选，支持 2GB 大文件高速转存）
 Telegram 官方公网接口对 Bot 限制单文件最大下载 20MB。为转存高清长视频与大文件，推荐启用本地 Bot API 容器：
 - **一键脚本部署**：编辑 `/opt/video-site-91/telegram.yml`，填入 `TELEGRAM_API_ID` 与 `TELEGRAM_API_HASH`，执行 `sudo docker compose -f telegram.yml up -d --pull always` 并执行 `sudo 91 restart`。
 - **Docker Compose 部署**：在编排配置中配置 `telegram-bot-api` 容器，并与主程序挂载相同的媒体共享目录。
@@ -157,7 +169,20 @@ Telegram 官方公网接口对 Bot 限制单文件最大下载 20MB。为转存�
 > [!TIP]
 > 详细架构流程图与编排配置模板，请参阅：👉 [Telegram 本地高速 API 部署指南](backend/docs/Enable_Telegram.md)
 
-### 3. Web 后台启用与使用
+### 3. 配置 Telegram 客户端协议（MTProto User API，突破受限/敏感频道与相册转存）
+针对部分设置了成人/敏感内容保护的频道（网页端会提示 `Please open Telegram to view this post`）以及带有相册组（包含多图+视频）的动态：
+1. 前往 [my.telegram.org](https://my.telegram.org) 登录并进入 *API development tools* 获取 `API ID` 与 `API Hash`；
+2. 登录 Web 管理后台，进入 **配置面板 → Telegram**，在「Telegram 客户端协议」专区勾选启用，并填入 `API ID` 与 `API Hash`；
+3. **快速生成凭据 Session**：点击「使用手机号辅助登录生成 Session」按钮，输入手机号和 Telegram 发送的验证码（若开启 2FA 需输入二次密码），系统将全自动登录并持久化保存 Session；
+4. 点击「测试当前连接」即可实时核验登录状态。配置完成后，直接向机器人发送频道/群组消息链接（如 `https://t.me/renqi85/53569`），系统将全自动解析并将所有图片与视频分别入库！
+
+### 4. 平台 Cookie 管理与配置
+对于抖音、TikTok、YouTube、X 等平台的高画质或私密内容提取，可以在后台导入 Cookie：
+1. 登录 Web 管理后台，进入 **配置面板 → Cookie 管理**；
+2. 点击对应平台卡片（如 YouTube、抖音、TikTok、X/Twitter 等）的「编辑」按钮，直接粘贴导出的 Netscape 格式 cookies.txt 内容，或点击「上传」直接导入文件；
+3. 保存时系统自动进行 Netscape 语法预检并生成 `.bak` 镜像备份，如需还原可随时点击「回滚」。
+
+### 5. Web 后台启用与使用
 1. 登录 Web 管理后台，进入 **配置面板 → Telegram**，填入 Bot Token 并开启 Telegram 支持保存；
 2. 私聊你的机器人发送 `/id` 获取 Telegram 数字 ID，将其填入后台「允许的用户 ID」白名单保存；
 3. 向机器人发送视频、照片图集（Media Group），或直接发送各平台视频链接（X/Twitter、YouTube、TikTok、抖音、B站等），机器人将自动解析并实时推送下载与入库进度！
