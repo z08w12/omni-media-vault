@@ -1,0 +1,278 @@
+/* Mobile Video Detail & Native App Style Styles */
+.mobile-video-page {
+  position: relative;
+  min-height: 100vh;
+  background: #090a0f;
+  color: #f1f5f9;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Fixed/Sticky Player Container */
+.mobile-player-container {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  background: #000;
+  transition: box-shadow 0.2s ease;
+}
+
+.mobile-player-container--stuck {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+}
+
+.mobile-player-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+}
+
+/* Touch Gesture HUD */
+.mobile-gesture-hud {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: mobileHudFadeIn 0.15s ease;
+}
+
+.mobile-gesture-bar {
+  width: 100px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mobile-gesture-bar__fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 2px;
+  transition: width 0.05s linear;
+}
+
+@keyframes mobileHudFadeIn {
+  from { opacity: 0; transform: translate(-50%, -45%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Double-Tap Heart Animation */
+.mobile-like-heart {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  z-index: 60;
+  color: #f43f5e;
+  pointer-events: none;
+  animation: mobileHeartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes mobileHeartPop {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  30% { transform: translate(-50%, -50%) scale(1.4); opacity: 1; }
+  70% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.9; }
+  100% { transform: translate(-50%, -60%) scale(1.3); opacity: 0; }
+}
+
+/* Segmented Navigation Tabs */
+.mobile-video-tabs {
+  position: sticky;
+  top: calc(100vw * 9 / 16);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  background: #0f1118;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 16px;
+}
+
+.mobile-video-tab {
+  position: relative;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-video-tab--active {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.mobile-video-tab--active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 2.5px;
+  border-radius: 2px 2px 0 0;
+  background: #38bdf8;
+}
+
+/* Tab Panels Container */
+.mobile-tab-content {
+  padding: 16px;
+}
+
+/* Mobile Summary Panel */
+.mobile-video-meta {
+  margin-bottom: 20px;
+}
+
+.mobile-video-title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #f8fafc;
+  margin-bottom: 8px;
+}
+
+.mobile-video-subrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 14px;
+}
+
+/* Quick Action Bar (Like, Star, Share, Delete) */
+.mobile-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 16px;
+}
+
+.mobile-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-action-btn--active {
+  color: #38bdf8;
+}
+
+.mobile-action-btn:active {
+  transform: scale(0.9);
+}
+
+/* Mobile Episodes Grid */
+.mobile-episodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mobile-episode-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.mobile-episode-chip--active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+/* Mobile Recommendations List */
+.mobile-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-rec-card {
+  display: flex;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mobile-rec-thumb-wrap {
+  position: relative;
+  width: 130px;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1e293b;
+}
+
+.mobile-rec-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mobile-rec-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.mobile-rec-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #f1f5f9;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mobile-rec-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}

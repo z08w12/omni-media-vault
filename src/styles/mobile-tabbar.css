@@ -1,0 +1,111 @@
+.mobile-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(18, 20, 26, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mobile-tab-bar--hidden {
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+.mobile-tab-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  outline: none;
+  transition: color 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab-item:active {
+  transform: scale(0.92);
+}
+
+.mobile-tab-item--active {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.mobile-tab-item__icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.mobile-tab-item--active .mobile-tab-item__icon-wrap {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.mobile-tab-item__label {
+  line-height: 1;
+  letter-spacing: 0.2px;
+}
+
+.mobile-tab-item__indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+/* Add bottom padding and lift floating buttons when mobile tab bar is active */
+@media (max-width: 768px) {
+  .app-shell.has-mobile-tab-bar {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.has-mobile-tab-bar .back-to-top {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.has-mobile-tab-bar .home-refresh {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.has-mobile-tab-bar.is-back-to-top-visible .home-refresh {
+    bottom: calc(122px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.has-mobile-tab-bar .main-nav__toggle {
+    display: none;
+  }
+}

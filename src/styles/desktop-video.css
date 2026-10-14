@@ -1,0 +1,180 @@
+/* Desktop Video Detail & Theater Mode Styles */
+.desktop-video-page {
+  position: relative;
+  min-height: calc(100vh - 120px);
+  padding: 24px 0 60px;
+  color: #f1f5f9;
+}
+
+/* Ambient backlight glow container */
+.desktop-ambient-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 600px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.desktop-ambient-canvas {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120%;
+  height: 100%;
+  filter: blur(80px) saturate(180%);
+  opacity: 0.35;
+  transition: opacity 0.5s ease;
+}
+
+.desktop-video-container {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Layout modes */
+.desktop-video-layout {
+  display: grid;
+  gap: 28px;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Default mode: 2 columns (Player 70% + Rail 30%) */
+.desktop-video-layout--default {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+/* Theater Mode: Full width player, rail falls below */
+.desktop-video-layout--theater {
+  grid-template-columns: 1fr;
+}
+
+.desktop-video-main {
+  min-width: 0;
+}
+
+/* Player Stage */
+.desktop-player-stage {
+  position: relative;
+  width: 100%;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: height 0.3s ease, border-radius 0.3s ease;
+}
+
+.desktop-video-layout--default .desktop-player-stage {
+  aspect-ratio: 16 / 9;
+}
+
+.desktop-video-layout--theater .desktop-player-stage {
+  max-height: 78vh;
+  aspect-ratio: 21 / 9;
+  min-height: 520px;
+}
+
+/* Controls toolbar below player for desktop */
+.desktop-player-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
+
+.desktop-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.desktop-mode-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.desktop-mode-btn--active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Video Info Section */
+.desktop-video-meta {
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.desktop-video-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #f8fafc;
+  margin: 0 0 12px 0;
+  word-break: break-word;
+}
+
+.desktop-video-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.desktop-video-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.desktop-author-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.desktop-author-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.desktop-publish-date {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Secondary lower layout when in theater mode */
+.desktop-theater-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 28px;
+  margin-top: 24px;
+}

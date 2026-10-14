@@ -10,6 +10,8 @@ import {
   usePageScrollRoot,
 } from "@/lib/pageScroll";
 import { useRouteActivity } from "@/lib/routeActivity";
+import { useDevice } from "@/platform";
+import { MobileTabBar } from "@/views/navigation/MobileTabBar";
 
 type Props = {
   children: ReactNode;
@@ -21,6 +23,7 @@ const SCROLL_DELTA_THRESHOLD = 6;
 const HIDE_AFTER_SCROLL_Y = 56;
 
 export function AppShell({ children, mobileAutoHideNav = false }: Props) {
+  const { isMobile } = useDevice();
   const scrollRootRef = usePageScrollRoot();
   const routeActive = useRouteActivity();
   const [mobileNavHidden, setMobileNavHidden] = useState(false);
@@ -89,6 +92,7 @@ export function AppShell({ children, mobileAutoHideNav = false }: Props) {
     mobileAutoHideNav ? "app-shell--mobile-auto-hide-nav" : "",
     mobileNavHidden ? "is-mobile-nav-hidden" : "",
     backToTopVisible ? "is-back-to-top-visible" : "",
+    isMobile ? "has-mobile-tab-bar" : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -101,6 +105,7 @@ export function AppShell({ children, mobileAutoHideNav = false }: Props) {
       <main className="app-shell__main">{children}</main>
       <Footer />
       <BackToTop onVisibilityChange={setBackToTopVisible} />
+      {isMobile && <MobileTabBar />}
     </div>
   );
 }
