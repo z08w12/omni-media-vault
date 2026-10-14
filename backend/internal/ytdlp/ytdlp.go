@@ -359,22 +359,69 @@ func FindPlatformCookiesFile(jobDir, platform string) string {
 	return FindCookiesFile(jobDir)
 }
 
-// copyFileContents copies file content from src to dst.
-func copyFileContents(src, dst string) error {
+// platformDomains maps platform names to matching cookie domain substrings.
+var platformDomains = map[string][]string{
+	"youtube":  {"youtube.com", "google.com", "googlevideo.com", "youtu.be"},
+	"x":        {"x.com", "twitter.com", "t.co"},
+	"twitter":  {"x.com", "twitter.com", "t.co"},
+	"tiktok":   {"tiktok.com", "byteoversea.com", "ibytedtos.com"},
+	"douyin":   {"douyin.com", "iesdouyin.com", "amemv.com"},
+	"抖音":       {"douyin.com", "iesdouyin.com", "amemv.com"},
+	"bilibili": {"bilibili.com", "b23.tv", "hdslb.com"},
+}
+
+// copyFileContentsWithFilter copies cookies from src to dst. If allowed domains exist for the
+// platform, it preserves comment headers (#...) and filters out cookies belonging to other platforms,
+// preventing cross-platform cookie exposure and pollution.
+func copyFileContentsWithFilter(src, dst, platform string) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
+
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	if _, err = io.Copy(out, in); err != nil {
+
+	domains := platformDomains[strings.ToLower(platform)]
+	if len(domains) == 0 {
+		if _, err = io.Copy(out, in); err != nil {
+			return err
+		}
+		return out.Sync()
+	}
+
+	scanner := bufio.NewScanner(in)
+	writer := bufio.NewWriter(out)
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+			_, _ = writer.WriteString(line + "\n")
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) > 0 {
+			domain := strings.ToLower(fields[0])
+			matched := false
+			for _, d := range domains {
+				if strings.Contains(domain, d) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				_, _ = writer.WriteString(line + "\n")
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
 		return err
 	}
-	return out.Sync()
+	return writer.Flush()
 }
 
 // DownloadVideo downloads the video from the supported public URL into jobDir.
@@ -431,7 +478,7 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 	if cookiesFile := FindPlatformCookiesFile(jobDir, platform); cookiesFile != "" {
 		// 复制到任务专属临时文件，防止 yt-dlp 回写覆盖或污染原 cookies 文件
 		tempCookies := filepath.Join(jobDir, ".job_cookies.txt")
-		if err := copyFileContents(cookiesFile, tempCookies); err == nil {
+		if err := copyFileContentsWithFilter(cookiesFile, tempCookies, platform); err == nil {
 			defer os.Remove(tempCookies)
 			args = append(args, "--cookies", tempCookies)
 		} else {

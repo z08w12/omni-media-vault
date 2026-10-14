@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -330,23 +331,40 @@ func TestExtractGenericVideoURL_ExcludesTelegram(t *testing.T) {
 	}
 }
 
-func TestCopyFileContents(t *testing.T) {
+func TestCopyFileContentsWithFilter(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "cookies.txt")
-	dst := filepath.Join(dir, "temp_cookies.txt")
-	content := "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tTEST\t1\n"
+	dstX := filepath.Join(dir, "temp_cookies_x.txt")
+	dstYT := filepath.Join(dir, "temp_cookies_yt.txt")
+	content := "# Netscape HTTP Cookie File\n# Comments preserved\n.youtube.com\tTRUE\t/\tTRUE\t0\tYOUTUBE_TOKEN\t1\n.x.com\tTRUE\t/\tTRUE\t0\tAUTH_TOKEN\t2\n"
 	if err := os.WriteFile(src, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := copyFileContents(src, dst); err != nil {
-		t.Fatalf("copyFileContents failed: %v", err)
+
+	// Filter for X
+	if err := copyFileContentsWithFilter(src, dstX, "X"); err != nil {
+		t.Fatalf("copyFileContentsWithFilter X failed: %v", err)
 	}
-	copied, err := os.ReadFile(dst)
+	copiedX, err := os.ReadFile(dstX)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(copied) != content {
-		t.Fatalf("copied content = %q, want %q", string(copied), content)
+	strX := string(copiedX)
+	if !strings.Contains(strX, "AUTH_TOKEN") || strings.Contains(strX, "YOUTUBE_TOKEN") {
+		t.Fatalf("X filter did not isolate cookies properly: %q", strX)
+	}
+
+	// Filter for YouTube
+	if err := copyFileContentsWithFilter(src, dstYT, "YouTube"); err != nil {
+		t.Fatalf("copyFileContentsWithFilter YouTube failed: %v", err)
+	}
+	copiedYT, err := os.ReadFile(dstYT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strYT := string(copiedYT)
+	if !strings.Contains(strYT, "YOUTUBE_TOKEN") || strings.Contains(strYT, "AUTH_TOKEN") {
+		t.Fatalf("YouTube filter did not isolate cookies properly: %q", strYT)
 	}
 }
 
