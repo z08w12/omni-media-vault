@@ -34,9 +34,11 @@ type PlatformCookieStatus struct {
 	DisplayName string `json:"displayName"`
 	FileName    string `json:"fileName"`
 	Configured  bool   `json:"configured"`
+	Exists      bool   `json:"exists"`
 	Size        int64  `json:"size"`
 	LineCount   int    `json:"lineCount"`
 	UpdatedAt   string `json:"updatedAt"`
+	ModTime     string `json:"modTime"`
 	SHA256      string `json:"sha256"`
 	HasBackup   bool   `json:"hasBackup"`
 }
@@ -80,17 +82,28 @@ func (m *Manager) initialMigration() {
 		if info, err := os.Stat(targetPath); err == nil && info.Size() > 0 {
 			continue
 		}
+		candidateNames := []string{p.FileName}
+		if p.ID == "x" {
+			candidateNames = append(candidateNames, "cookies_twitter.txt")
+		} else if p.ID == "douyin" {
+			candidateNames = append(candidateNames, "cookies_抖音.txt")
+		}
+
 		// Try to find in legacy directories
+		migrated := false
 		for _, legDir := range m.legacyDirs {
-			if legDir == "" {
+			if legDir == "" || migrated {
 				continue
 			}
-			srcPath := filepath.Join(legDir, p.FileName)
-			if srcInfo, err := os.Stat(srcPath); err == nil && !srcInfo.IsDir() && srcInfo.Size() > 0 {
-				data, err := os.ReadFile(srcPath)
-				if err == nil && len(data) > 0 {
-					_ = os.WriteFile(targetPath, data, 0o600)
-					break
+			for _, name := range candidateNames {
+				srcPath := filepath.Join(legDir, name)
+				if srcInfo, err := os.Stat(srcPath); err == nil && !srcInfo.IsDir() && srcInfo.Size() > 0 {
+					data, err := os.ReadFile(srcPath)
+					if err == nil && len(data) > 0 {
+						_ = os.WriteFile(targetPath, data, 0o600)
+						migrated = true
+						break
+					}
 				}
 			}
 		}
@@ -99,6 +112,9 @@ func (m *Manager) initialMigration() {
 
 func FindPlatformDef(platform string) (PlatformDef, bool) {
 	norm := strings.ToLower(strings.TrimSpace(platform))
+	if norm == "twitter" {
+		norm = "x"
+	}
 	for _, p := range SupportedPlatforms {
 		if strings.ToLower(p.ID) == norm || strings.ToLower(p.FileName) == norm {
 			return p, true
@@ -127,7 +143,7 @@ func (m *Manager) getPlatformStatus(p PlatformDef) PlatformCookieStatus {
 		FileName:    p.FileName,
 	}
 
-	filePath := m.locateCookieFile(p.FileName)
+	filePath := m.locateCookieFile(p)
 	if filePath == "" {
 		return st
 	}
@@ -143,8 +159,11 @@ func (m *Manager) getPlatformStatus(p PlatformDef) PlatformCookieStatus {
 	}
 
 	st.Configured = true
+	st.Exists = true
 	st.Size = info.Size()
-	st.UpdatedAt = info.ModTime().Format(time.RFC3339)
+	formattedTime := info.ModTime().Format(time.RFC3339)
+	st.UpdatedAt = formattedTime
+	st.ModTime = formattedTime
 
 	hash := sha256.Sum256(data)
 	st.SHA256 = hex.EncodeToString(hash[:])
@@ -169,20 +188,31 @@ func (m *Manager) getPlatformStatus(p PlatformDef) PlatformCookieStatus {
 	return st
 }
 
-func (m *Manager) locateCookieFile(fileName string) string {
+func (m *Manager) locateCookieFile(p PlatformDef) string {
+	candidateNames := []string{p.FileName}
+	if p.ID == "x" {
+		candidateNames = append(candidateNames, "cookies_twitter.txt")
+	} else if p.ID == "douyin" {
+		candidateNames = append(candidateNames, "cookies_抖音.txt")
+	}
+
 	// 1. Data dir
-	primary := filepath.Join(m.dataDir, fileName)
-	if info, err := os.Stat(primary); err == nil && !info.IsDir() && info.Size() > 0 {
-		return primary
+	for _, name := range candidateNames {
+		primary := filepath.Join(m.dataDir, name)
+		if info, err := os.Stat(primary); err == nil && !info.IsDir() && info.Size() > 0 {
+			return primary
+		}
 	}
 	// 2. Legacy dirs
 	for _, legDir := range m.legacyDirs {
 		if legDir == "" {
 			continue
 		}
-		path := filepath.Join(legDir, fileName)
-		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Size() > 0 {
-			return path
+		for _, name := range candidateNames {
+			path := filepath.Join(legDir, name)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Size() > 0 {
+				return path
+			}
 		}
 	}
 	return ""
@@ -198,7 +228,7 @@ func (m *Manager) GetContent(ctx context.Context, platform string) (string, erro
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	filePath := m.locateCookieFile(p.FileName)
+	filePath := m.locateCookieFile(p)
 	if filePath == "" {
 		return "", nil
 	}

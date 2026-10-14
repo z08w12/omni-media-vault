@@ -804,7 +804,9 @@ export function SettingsPage() {
                 </SettingsSection>
               )}
               <TelegramSettingsSection active={telegramSelected} disabled={controlsDisabled} draft={draft} onChange={updateVisualField} />
-              <CookiesSettingsSection active={cookiesSelected} />
+              {activeSection === "config-cookies" && (
+                <CookiesSettingsSection active={cookiesSelected} />
+              )}
             </form>
           </div>
         </div>

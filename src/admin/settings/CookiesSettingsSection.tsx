@@ -108,7 +108,8 @@ export function CookiesSettingsSection({ active }: Props) {
     setEditorLoading(true);
     setEditorContent("");
     try {
-      if (item.exists) {
+      const hasData = Boolean(item.configured ?? item.exists);
+      if (hasData) {
         const res = await api.getCookieContent(item.platform);
         setEditorContent(res.content);
       } else {
@@ -222,8 +223,10 @@ export function CookiesSettingsSection({ active }: Props) {
     editorContent.trim().toLowerCase().startsWith("<html");
   const isSuspiciousJson = editorContent.trim().startsWith("{");
 
+  if (!active) return null;
+
   return (
-    <div className="admin-cookies-settings" hidden={!active}>
+    <div className="admin-cookies-settings">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -275,120 +278,125 @@ export function CookiesSettingsSection({ active }: Props) {
 
         {/* Platform Cards */}
         <div className="cookies-grid">
-          {items.map((item) => (
-            <div
-              key={item.platform}
-              className={`cookie-card ${item.exists ? "is-configured" : "is-empty"}`}
-            >
-              <div>
-                <div className="cookie-card__header">
-                  <div className="cookie-card__title-group">
-                    <div className="cookie-card__platform-icon" aria-hidden="true">
-                      <Cookie size={18} />
-                    </div>
-                    <div>
-                      <div className="cookie-card__title">{item.displayName}</div>
-                      <div className="cookie-card__filename">{item.fileName}</div>
-                    </div>
-                  </div>
-                  <span className={`cookie-badge ${item.exists ? "is-success" : "is-muted"}`}>
-                    {item.exists ? (
-                      <>
-                        <CheckCircle2 size={12} aria-hidden="true" />
-                        <span>已配置</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle size={12} aria-hidden="true" />
-                        <span>未配置</span>
-                      </>
-                    )}
-                  </span>
-                </div>
+          {items.map((item) => {
+            const isConfigured = Boolean(item.configured ?? item.exists);
+            const updatedTime = item.updatedAt || item.modTime;
 
-                <div className="cookie-card__body">
-                  <div className="cookie-stat-row">
-                    <span className="cookie-stat-row__label">文件大小</span>
-                    <span className="cookie-stat-row__value">{formatBytes(item.size)}</span>
+            return (
+              <div
+                key={item.platform}
+                className={`cookie-card ${isConfigured ? "is-configured" : "is-empty"}`}
+              >
+                <div>
+                  <div className="cookie-card__header">
+                    <div className="cookie-card__title-group">
+                      <div className="cookie-card__platform-icon" aria-hidden="true">
+                        <Cookie size={18} />
+                      </div>
+                      <div>
+                        <div className="cookie-card__title">{item.displayName}</div>
+                        <div className="cookie-card__filename">{item.fileName}</div>
+                      </div>
+                    </div>
+                    <span className={`cookie-badge ${isConfigured ? "is-success" : "is-muted"}`}>
+                      {isConfigured ? (
+                        <>
+                          <CheckCircle2 size={12} aria-hidden="true" />
+                          <span>已配置</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle size={12} aria-hidden="true" />
+                          <span>未配置</span>
+                        </>
+                      )}
+                    </span>
                   </div>
-                  <div className="cookie-stat-row">
-                    <span className="cookie-stat-row__label">有效 Cookie</span>
-                    <span className="cookie-stat-row__value">{item.lineCount} 条</span>
-                  </div>
-                  <div className="cookie-stat-row">
-                    <span className="cookie-stat-row__label">修改时间</span>
-                    <span className="cookie-stat-row__value">{formatDate(item.modTime)}</span>
-                  </div>
-                  {item.sha256 && (
+
+                  <div className="cookie-card__body">
                     <div className="cookie-stat-row">
-                      <span className="cookie-stat-row__label">SHA-256</span>
-                      <span
-                        className="cookie-stat-row__value cookie-sha256-code"
-                        title={`点击复制: ${item.sha256}`}
-                        onClick={() => handleCopySha(item.sha256!)}
-                      >
-                        {item.sha256.substring(0, 10)}...
-                        {copiedSha === item.sha256 ? (
-                          <Check size={12} style={{ color: "#10b981" }} />
-                        ) : (
-                          <Copy size={12} />
-                        )}
-                      </span>
+                      <span className="cookie-stat-row__label">文件大小</span>
+                      <span className="cookie-stat-row__value">{formatBytes(item.size)}</span>
                     </div>
-                  )}
+                    <div className="cookie-stat-row">
+                      <span className="cookie-stat-row__label">有效 Cookie</span>
+                      <span className="cookie-stat-row__value">{item.lineCount} 条</span>
+                    </div>
+                    <div className="cookie-stat-row">
+                      <span className="cookie-stat-row__label">修改时间</span>
+                      <span className="cookie-stat-row__value">{formatDate(updatedTime)}</span>
+                    </div>
+                    {item.sha256 && (
+                      <div className="cookie-stat-row">
+                        <span className="cookie-stat-row__label">SHA-256</span>
+                        <span
+                          className="cookie-stat-row__value cookie-sha256-code"
+                          title={`点击复制: ${item.sha256}`}
+                          onClick={() => handleCopySha(item.sha256!)}
+                        >
+                          {item.sha256.substring(0, 10)}...
+                          {copiedSha === item.sha256 ? (
+                            <Check size={12} style={{ color: "#10b981" }} />
+                          ) : (
+                            <Copy size={12} />
+                          )}
+                        </span>
+                      </div>
+                    )}
 
+                    {item.hasBackup && (
+                      <div className="cookie-card__backup-notice">
+                        <History size={12} aria-hidden="true" />
+                        <span>已保留最近备份 (.bak)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="cookie-card__actions">
+                  <button
+                    type="button"
+                    className="admin-btn is-primary"
+                    onClick={() => void handleOpenEdit(item)}
+                    title="查看或在线修改 Cookie 内容"
+                  >
+                    <FileEdit size={13} aria-hidden="true" />
+                    <span>编辑</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    onClick={() => handleTriggerUpload(item)}
+                    title="选择本地 cookies.txt 文件直接上传"
+                  >
+                    <Upload size={13} aria-hidden="true" />
+                    <span>上传</span>
+                  </button>
                   {item.hasBackup && (
-                    <div className="cookie-card__backup-notice">
-                      <History size={12} aria-hidden="true" />
-                      <span>已保留最近备份 (.bak)</span>
-                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn is-icon-only"
+                      onClick={() => setRestoreTarget(item)}
+                      title="恢复到上一个备份版本"
+                    >
+                      <RotateCcw size={13} aria-hidden="true" />
+                    </button>
+                  )}
+                  {isConfigured && (
+                    <button
+                      type="button"
+                      className="admin-btn is-danger is-icon-only"
+                      onClick={() => setDeleteTarget(item)}
+                      title="清空此平台 Cookie"
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
                   )}
                 </div>
               </div>
-
-              {/* Actions */}
-              <div className="cookie-card__actions">
-                <button
-                  type="button"
-                  className="admin-btn is-primary"
-                  onClick={() => void handleOpenEdit(item)}
-                  title="查看或在线修改 Cookie 内容"
-                >
-                  <FileEdit size={13} aria-hidden="true" />
-                  <span>编辑</span>
-                </button>
-                <button
-                  type="button"
-                  className="admin-btn"
-                  onClick={() => handleTriggerUpload(item)}
-                  title="选择本地 cookies.txt 文件直接上传"
-                >
-                  <Upload size={13} aria-hidden="true" />
-                  <span>上传</span>
-                </button>
-                {item.hasBackup && (
-                  <button
-                    type="button"
-                    className="admin-btn is-icon-only"
-                    onClick={() => setRestoreTarget(item)}
-                    title="恢复到上一个备份版本"
-                  >
-                    <RotateCcw size={13} aria-hidden="true" />
-                  </button>
-                )}
-                {item.exists && (
-                  <button
-                    type="button"
-                    className="admin-btn is-danger is-icon-only"
-                    onClick={() => setDeleteTarget(item)}
-                    title="清空此平台 Cookie"
-                  >
-                    <Trash2 size={13} aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </SettingsSection>
 

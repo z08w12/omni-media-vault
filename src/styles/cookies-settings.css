@@ -9,6 +9,10 @@
   width: 100%;
 }
 
+.admin-cookies-settings[hidden] {
+  display: none !important;
+}
+
 .cookies-info-banner {
   display: flex;
   align-items: flex-start;

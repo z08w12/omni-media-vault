@@ -1211,9 +1211,11 @@ export type PlatformCookieStatus = {
   platform: string;
   displayName: string;
   fileName: string;
-  exists: boolean;
+  configured?: boolean;
+  exists?: boolean;
   size: number;
   modTime?: string;
+  updatedAt?: string;
   lineCount: number;
   sha256?: string;
   hasBackup: boolean;
