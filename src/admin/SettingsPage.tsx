@@ -545,7 +545,7 @@ export function SettingsPage() {
               type="button"
               aria-pressed={activeTab === "source"}
               className={activeTab === "source" ? "is-active" : ""}
-              disabled={loading || saving || cookiesSelected}
+              disabled={loading || saving}
               onClick={() => handleTabChange("source")}
             >
               源码编辑
