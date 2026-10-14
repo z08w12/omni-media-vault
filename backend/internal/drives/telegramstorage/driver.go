@@ -72,6 +72,12 @@ func Path(root, fileID string) (string, error) {
 func (d *Driver) LocalPath(ctx context.Context, id string) (string, error) {
 	f, err := d.cat.TelegramLocalFile(ctx, id)
 	if err != nil {
+		path, pathErr := Path(d.root(), id)
+		if pathErr == nil {
+			if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() {
+				return path, nil
+			}
+		}
 		return "", os.ErrNotExist
 	}
 	return Path(d.root(), f.FileID)

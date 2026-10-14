@@ -26,8 +26,9 @@ func (c *Catalog) migrateImports(ctx context.Context) error {
 	}
 	_, err := c.db.ExecContext(ctx, `
  CREATE TABLE IF NOT EXISTS telegram_local_files (
-  file_id TEXT PRIMARY KEY, job_id TEXT NOT NULL UNIQUE
+  file_id TEXT PRIMARY KEY, job_id TEXT NOT NULL
  );
+ CREATE INDEX IF NOT EXISTS idx_telegram_local_files_job ON telegram_local_files(job_id);
  CREATE TABLE IF NOT EXISTS telegram_connections (
   bot_id INTEGER PRIMARY KEY, next_offset INTEGER NOT NULL DEFAULT 0,
   needs_reconnect INTEGER NOT NULL DEFAULT 0
@@ -60,9 +61,37 @@ func (c *Catalog) migrateImports(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := c.migrateTelegramLocalFilesUnique(ctx); err != nil {
+		return err
+	}
 	// File identities already name entries in library/. Physical placement now
 	// follows the configured storage root, including for existing acquisitions.
 	return c.dropColumnIfExists(ctx, "telegram_local_files", "root")
+}
+
+func (c *Catalog) migrateTelegramLocalFilesUnique(ctx context.Context) error {
+	var sqlStr string
+	err := c.db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type='table' AND name='telegram_local_files'`).Scan(&sqlStr)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+	if !strings.Contains(sqlStr, "UNIQUE") {
+		return nil
+	}
+	_, err = c.db.ExecContext(ctx, `
+		CREATE TABLE telegram_local_files_new (
+			file_id TEXT PRIMARY KEY,
+			job_id TEXT NOT NULL
+		);
+		INSERT OR IGNORE INTO telegram_local_files_new SELECT file_id, job_id FROM telegram_local_files;
+		DROP TABLE telegram_local_files;
+		ALTER TABLE telegram_local_files_new RENAME TO telegram_local_files;
+		CREATE INDEX IF NOT EXISTS idx_telegram_local_files_job ON telegram_local_files(job_id);
+	`)
+	return err
 }
 
 type TelegramSource struct {
