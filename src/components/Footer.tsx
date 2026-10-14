@@ -13,7 +13,7 @@ export function Footer() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          © {new Date().getFullYear()} Omni-Media-Vault
+          © {new Date().getFullYear()} 91
         </a>
 
         {/* 视口/设备模式手动切换器 */}
