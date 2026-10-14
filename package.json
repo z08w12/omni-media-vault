@@ -2,7 +2,7 @@
   "name": "omni-media-vault",
   "private": true,
   "license": "MIT",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"

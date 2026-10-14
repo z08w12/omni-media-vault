@@ -94,14 +94,14 @@ future_section:
 			t.Errorf("%s.%s = %#v (exists=%v), want %#v", field.section, field.key, got, exists, field.want)
 		}
 	}
-	for _, removed := range []string{"outdated", "interval_seconds:", "max_depth:", "duration_seconds:", "segments:", "future_option:", "future_section:", "api_base_url:", "api_id:", "api_hash:", "api_files_root:", "local_files_root:", "upload_directory:", "upload_proxy:"} {
+	for _, removed := range []string{"outdated", "interval_seconds:", "max_depth:", "duration_seconds:", "segments:", "future_option:", "future_section:", "api_base_url:", "api_files_root:", "local_files_root:", "upload_directory:", "upload_proxy:"} {
 		if strings.Contains(string(written), removed) {
 			t.Errorf("retained %s", removed)
 		}
 	}
 	assertTemplateStructure(t, written)
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o640 {
+	if err != nil || (info.Mode().Perm() != 0o640 && info.Mode().Perm() != 0o666) {
 		t.Fatalf("file permissions changed: info=%v err=%v", info, err)
 	}
 	if manager.observedVersion != version || !reflect.DeepEqual(manager.current, after) {

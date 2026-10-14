@@ -319,15 +319,65 @@ func TestExtractGenericVideoURL_ExcludesTelegram(t *testing.T) {
 		if _, _, found := ExtractGenericVideoURL(tc); found {
 			t.Errorf("ExtractGenericVideoURL(%q) should be excluded, but was found", tc)
 		}
-		if _, found := ExtractPlatformLink(tc); found {
-			t.Errorf("ExtractPlatformLink(%q) should not treat telegram link as video platform", tc)
-		}
+	}
+
+	// Non-message Telegram link should not be treated as a platform link
+	if _, found := ExtractPlatformLink("https://telegram.org/dl"); found {
+		t.Errorf("ExtractPlatformLink('https://telegram.org/dl') should not be recognized")
 	}
 
 	valid := "https://example.com/video.mp4"
 	id, u, found := ExtractGenericVideoURL(valid)
 	if !found || id == "" || u != valid {
 		t.Errorf("ExtractGenericVideoURL(%q) failed: got (%q, %q, %v)", valid, id, u, found)
+	}
+}
+
+func TestExtractTelegramMessageLink(t *testing.T) {
+	cases := []struct {
+		input       string
+		wantID      string
+		wantURL     string
+		wantChannel string
+		wantMsgID   int64
+	}{
+		{
+			input:       "https://t.me/renqi85/53569",
+			wantID:      "renqi85_53569",
+			wantURL:     "https://t.me/renqi85/53569",
+			wantChannel: "renqi85",
+			wantMsgID:   53569,
+		},
+		{
+			input:       "https://t.me/c/1234567890/53569?single",
+			wantID:      "c_1234567890_53569",
+			wantURL:     "https://t.me/c/1234567890/53569",
+			wantChannel: "-1001234567890",
+			wantMsgID:   53569,
+		},
+		{
+			input:       "https://telegram.me/durov/123",
+			wantID:      "durov_123",
+			wantURL:     "https://t.me/durov/123",
+			wantChannel: "durov",
+			wantMsgID:   123,
+		},
+	}
+
+	for _, tc := range cases {
+		id, u, ok := ExtractTelegramMessageLink(tc.input)
+		if !ok || id != tc.wantID || u != tc.wantURL {
+			t.Errorf("ExtractTelegramMessageLink(%q) = (%q, %q, %v), want (%q, %q, true)", tc.input, id, u, ok, tc.wantID, tc.wantURL)
+		}
+		ch, msgID, err := ParseTelegramChannelAndMsgID(tc.input)
+		if err != nil || ch != tc.wantChannel || msgID != tc.wantMsgID {
+			t.Errorf("ParseTelegramChannelAndMsgID(%q) = (%q, %d, %v), want (%q, %d, nil)", tc.input, ch, msgID, err, tc.wantChannel, tc.wantMsgID)
+		}
+
+		link, found := ExtractPlatformLink(tc.input)
+		if !found || link.Platform != "Telegram" || link.Prefix != "tg:" || link.ID != tc.wantID {
+			t.Errorf("ExtractPlatformLink(%q) = %+v, want Platform Telegram with ID %q", tc.input, link, tc.wantID)
+		}
 	}
 }
 

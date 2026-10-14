@@ -16,6 +16,12 @@ type Telegram struct {
 	MaxPendingJobs      int     `yaml:"max_pending_jobs" json:"maxPendingJobs"`
 	FetchTimeoutSeconds int     `yaml:"fetch_timeout_seconds" json:"fetchTimeoutSeconds"`
 
+	// MTProto User API client credentials (for channel/post video downloads)
+	UserClientEnabled bool   `yaml:"user_client_enabled" json:"userClientEnabled"`
+	APIID             string `yaml:"api_id" json:"apiId"`
+	APIHash           string `yaml:"api_hash" json:"apiHash"`
+	SessionString     string `yaml:"session_string" json:"sessionString"`
+
 	// The runtime endpoint and paths come exclusively from the deployment's Compose file.
 	APIBaseURL     string `yaml:"-" json:"apiBaseUrl"`
 	APIFilesRoot   string `yaml:"-" json:"-"`
@@ -26,6 +32,10 @@ var telegramTokenPattern = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9_-]+$`)
 
 func (t *Telegram) Validate() error {
 	t.BotToken = strings.TrimSpace(t.BotToken)
+	t.APIID = strings.TrimSpace(t.APIID)
+	t.APIHash = strings.TrimSpace(t.APIHash)
+	t.SessionString = strings.TrimSpace(t.SessionString)
+
 	if t.BotToken != "" && !telegramTokenPattern.MatchString(t.BotToken) {
 		return errors.New("telegram.bot_token 格式无效")
 	}

@@ -508,3 +508,33 @@ func TestAcceptYouTubeVideoPost(t *testing.T) {
 	}
 }
 
+func TestAcceptTelegramChannelPost(t *testing.T) {
+	s, cat := testService(t)
+	ctx := context.Background()
+	m1 := &message{
+		ID:   20,
+		Date: 1789975384,
+		From: user{ID: 42},
+		Text: "精彩视频 https://t.me/renqi85/53569 #写真 #诱惑",
+	}
+	m1.Chat.ID = 42
+	m1.Chat.Type = "private"
+	u := update{ID: 10, Message: m1}
+	if err := s.accept(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := cat.ListImportJobs(ctx, "telegram", "", 0, 30)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs=%v err=%v", jobs, err)
+	}
+	if jobs[0].SourceLabel != "Telegram" {
+		t.Fatalf("expected SourceLabel Telegram, got %q", jobs[0].SourceLabel)
+	}
+	if jobs[0].RequestedTitle != "Telegram-renqi85_53569" {
+		t.Fatalf("expected RequestedTitle Telegram-renqi85_53569, got %q", jobs[0].RequestedTitle)
+	}
+	if len(jobs[0].Tags) != 4 || jobs[0].Tags[0] != "TG" || jobs[0].Tags[1] != "Telegram" || jobs[0].Tags[2] != "写真" || jobs[0].Tags[3] != "诱惑" {
+		t.Fatalf("unexpected tags: %v", jobs[0].Tags)
+	}
+}
+

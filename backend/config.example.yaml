@@ -86,3 +86,10 @@ telegram:
   # 待处理任务上限、文件获取超时（秒）
   max_pending_jobs: 100
   fetch_timeout_seconds: 1800
+  # Telegram 客户端协议（MTProto User API / 频道链接解析）：用于突破网页限制转存公开或私密频道内视频
+  user_client_enabled: false
+  # my.telegram.org 申请的 API ID 与 API Hash
+  api_id: ""
+  api_hash: ""
+  # Telethon StringSession 登录凭证字符串（可直接填写或在后台辅助登录生成）
+  session_string: ""

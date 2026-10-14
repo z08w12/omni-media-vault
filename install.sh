@@ -153,7 +153,7 @@ install_deps() {
     export DEBIAN_FRONTEND=noninteractive
     log "installing runtime dependencies"
     apt-get update
-    apt-get install -y ca-certificates curl tar ffmpeg iproute2 python3 python3-requests python3-bs4 python3-lxml python3-socks
+    apt-get install -y ca-certificates curl tar ffmpeg iproute2 python3 python3-pip python3-venv python3-requests python3-bs4 python3-lxml python3-socks
     verify_runtime_deps
     return
   fi
@@ -196,7 +196,7 @@ backup_install_files() {
   local backup="$1"
   mkdir -p "$backup"
   cp -a "$INSTALL_PATH/server" "$backup/server"
-  for item in dist config.example.yaml config.yaml telegram.example.yml telegram.yml .version; do
+  for item in dist config.example.yaml config.yaml telegram.example.yml telegram.yml scripts .version; do
     if [[ -e "$INSTALL_PATH/$item" ]]; then
       cp -a "$INSTALL_PATH/$item" "$backup/$item"
     fi
@@ -207,7 +207,7 @@ restore_install_files() {
   local backup="$1"
   mkdir -p "$INSTALL_PATH"
   cp -a "$backup/server" "$INSTALL_PATH/server"
-  for item in dist config.example.yaml config.yaml telegram.example.yml telegram.yml .version; do
+  for item in dist config.example.yaml config.yaml telegram.example.yml telegram.yml scripts .version; do
     rm -rf "${INSTALL_PATH:?}/$item"
     if [[ -e "$backup/$item" ]]; then
       cp -a "$backup/$item" "$INSTALL_PATH/$item"
@@ -647,8 +647,30 @@ fetch_and_unpack() {
   cp -R "$root/dist" "$INSTALL_PATH/dist"
   cp "$root/config.example.yaml" "$INSTALL_PATH/config.example.yaml"
   cp "$root/telegram.example.yml" "$INSTALL_PATH/telegram.example.yml"
+  if [[ -d "$root/scripts" ]]; then
+    mkdir -p "$INSTALL_PATH/scripts"
+    cp -R "$root/scripts/"* "$INSTALL_PATH/scripts/"
+  fi
   chmod +x "$INSTALL_PATH/server"
+  setup_python_env
   rm -rf "$tmp"
+}
+
+setup_python_env() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+  local venv_dir="$INSTALL_PATH/scripts/venv"
+  if [[ ! -x "$venv_dir/bin/python" && ! -x "$venv_dir/bin/python3" ]]; then
+    log "initializing python virtual environment for MTProto user client..."
+    python3 -m venv "$venv_dir" 2>/dev/null || true
+  fi
+  if [[ -x "$venv_dir/bin/pip" ]]; then
+    if ! "$venv_dir/bin/python" -c "import telethon" >/dev/null 2>&1; then
+      log "installing telethon in $venv_dir..."
+      "$venv_dir/bin/pip" install --quiet telethon 2>/dev/null || true
+    fi
+  fi
 }
 
 installed_version() {

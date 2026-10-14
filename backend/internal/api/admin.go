@@ -263,6 +263,9 @@ func (a *AdminServer) Register(r chi.Router) {
 			// 配置文件与其它独立设置
 			r.Get("/telegram/status", a.handleTelegramStatus)
 			r.Post("/telegram/test", a.handleTelegramTest)
+			r.Post("/telegram/user-client/test", a.handleTelegramUserClientTest)
+			r.Post("/telegram/user-client/send-code", a.handleTelegramUserClientSendCode)
+			r.Post("/telegram/user-client/sign-in", a.handleTelegramUserClientSignIn)
 			r.Post("/telegram/prepare-polling", a.handleTelegramPrepare)
 			r.Post("/telegram/resume", a.handleTelegramResume)
 			r.Get("/import-jobs", a.handleImportList)

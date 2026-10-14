@@ -142,7 +142,7 @@ func TestCommandsAndMediaHintsRespectAccess(t *testing.T) {
 		{"unauthorized start", "/start", "private", 99, "需要开通权限"},
 		{"unauthorized help", "/help", "private", 99, "需要开通权限"},
 		{"unauthorized status", "/status", "private", 99, "需要开通权限"},
-		{"unsupported", "https://t.me/example/1", "private", 42, "请发送视频、图片"},
+		{"unsupported", "https://telegram.org/dl", "private", 42, "请发送视频、图片"},
 		{"unknown command", "/unknown", "private", 42, "请发送视频、图片"},
 		{"unauthorized media", "", "private", 99, ""},
 		{"group id", "/id", "group", 42, ""},

@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/video-site/backend/internal/catalog"
+	"github.com/video-site/backend/internal/telegram"
 )
 
 func (a *AdminServer) handleTelegramStatus(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +39,129 @@ func (a *AdminServer) handleTelegramTest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"username": name})
+}
+
+type userClientTestReq struct {
+	APIID   string `json:"apiId"`
+	APIHash string `json:"apiHash"`
+	Session string `json:"session"`
+}
+
+func (a *AdminServer) handleTelegramUserClientTest(w http.ResponseWriter, r *http.Request) {
+	var req userClientTestReq
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	cfg := a.ConfigManager.TelegramSettings()
+	apiID := strings.TrimSpace(req.APIID)
+	if apiID == "" {
+		apiID = cfg.APIID
+	}
+	apiHash := strings.TrimSpace(req.APIHash)
+	if apiHash == "" {
+		apiHash = cfg.APIHash
+	}
+	session := strings.TrimSpace(req.Session)
+	if session == "" {
+		session = cfg.SessionString
+	}
+
+	if apiID == "" || apiHash == "" || session == "" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("缺少 API ID、API Hash 或 Session 凭据"))
+		return
+	}
+
+	res, err := telegram.TestUserClient(r.Context(), apiID, apiHash, session)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+type userClientSendCodeReq struct {
+	APIID   string `json:"apiId"`
+	APIHash string `json:"apiHash"`
+	Phone   string `json:"phone"`
+}
+
+func (a *AdminServer) handleTelegramUserClientSendCode(w http.ResponseWriter, r *http.Request) {
+	var req userClientSendCodeReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请求体格式错误"))
+		return
+	}
+
+	cfg := a.ConfigManager.TelegramSettings()
+	apiID := strings.TrimSpace(req.APIID)
+	if apiID == "" {
+		apiID = cfg.APIID
+	}
+	apiHash := strings.TrimSpace(req.APIHash)
+	if apiHash == "" {
+		apiHash = cfg.APIHash
+	}
+	phone := strings.TrimSpace(req.Phone)
+
+	if apiID == "" || apiHash == "" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请先填写 API ID 和 API Hash"))
+		return
+	}
+	if phone == "" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请填写手机号码（含国家区号，如 +8613800000000）"))
+		return
+	}
+
+	res, err := telegram.SendUserClientCode(r.Context(), apiID, apiHash, phone)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+type userClientSignInReq struct {
+	APIID         string `json:"apiId"`
+	APIHash       string `json:"apiHash"`
+	Phone         string `json:"phone"`
+	Code          string `json:"code"`
+	PhoneCodeHash string `json:"phoneCodeHash"`
+	Session       string `json:"session"`
+	Password      string `json:"password"`
+}
+
+func (a *AdminServer) handleTelegramUserClientSignIn(w http.ResponseWriter, r *http.Request) {
+	var req userClientSignInReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请求体格式错误"))
+		return
+	}
+
+	cfg := a.ConfigManager.TelegramSettings()
+	apiID := strings.TrimSpace(req.APIID)
+	if apiID == "" {
+		apiID = cfg.APIID
+	}
+	apiHash := strings.TrimSpace(req.APIHash)
+	if apiHash == "" {
+		apiHash = cfg.APIHash
+	}
+	phone := strings.TrimSpace(req.Phone)
+	code := strings.TrimSpace(req.Code)
+	phoneCodeHash := strings.TrimSpace(req.PhoneCodeHash)
+	session := strings.TrimSpace(req.Session)
+	password := strings.TrimSpace(req.Password)
+
+	if code == "" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请填写验证码"))
+		return
+	}
+
+	res, err := telegram.SignInUserClient(r.Context(), apiID, apiHash, phone, code, phoneCodeHash, session, password)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 func (a *AdminServer) handleTelegramPrepare(w http.ResponseWriter, r *http.Request) {
 	a.telegramAction(w, r, false)

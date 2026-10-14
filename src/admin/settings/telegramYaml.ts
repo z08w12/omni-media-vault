@@ -9,6 +9,10 @@ export const TELEGRAM_DEFAULTS = {
   telegramMaxFileSizeBytes: 4 * 1024 ** 3,
   telegramMaxPendingJobs: 100,
   telegramFetchTimeoutSeconds: 1800,
+  telegramUserClientEnabled: false,
+  telegramApiId: "",
+  telegramApiHash: "",
+  telegramSessionString: "",
 };
 
 export type TelegramDraft = typeof TELEGRAM_DEFAULTS;
@@ -22,6 +26,10 @@ export const TELEGRAM_YAML_KEYS: Record<TelegramField, string> = {
   telegramMaxFileSizeBytes: "max_file_size_bytes",
   telegramMaxPendingJobs: "max_pending_jobs",
   telegramFetchTimeoutSeconds: "fetch_timeout_seconds",
+  telegramUserClientEnabled: "user_client_enabled",
+  telegramApiId: "api_id",
+  telegramApiHash: "api_hash",
+  telegramSessionString: "session_string",
 };
 export const TELEGRAM_FIELDS = Object.keys(
   TELEGRAM_YAML_KEYS,
@@ -50,6 +58,11 @@ export function telegramDraftFromDocument(document: Document): TelegramDraft {
         throw new Error("telegram.allowed_user_ids 必须是正整数 ID 列表");
       }
       draft[field] = [...new Set(value)].join(", ");
+    } else if (
+      field === "telegramApiId" &&
+      (typeof value === "number" || typeof value === "string")
+    ) {
+      draft[field] = String(value);
     } else if (typeof value !== typeof draft[field]) {
       throw new Error(`telegram.${key} 类型无效`);
     } else {

@@ -64,6 +64,10 @@ build_package() {
   cp "$ROOT_DIR/telegram.example.yml" "$work/telegram.example.yml"
   cp "$ROOT_DIR/install.sh" "$work/install.sh"
   cp -R "$ROOT_DIR/dist" "$work/dist"
+  if [[ -d "$ROOT_DIR/scripts" ]]; then
+    mkdir -p "$work/scripts"
+    cp -R "$ROOT_DIR/scripts/"* "$work/scripts/"
+  fi
   echo "$VERSION" > "$work/.version"
 
   cat >"$work/README.txt" <<EOF

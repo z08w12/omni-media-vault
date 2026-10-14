@@ -31,6 +31,9 @@ var (
 	BilibiliPattern = regexp.MustCompile(`(?i)https?://(?:(?:www\.)?bilibili\.com/video/(?P<id>(?:BV|bv)[A-Za-z0-9]{10}|av[0-9]{1,12})|b23\.tv/(?P<short_id>[A-Za-z0-9]{5,20}))`)
 	// GenericURLPattern matches any standalone http/https URL
 	GenericURLPattern = regexp.MustCompile(`(?i)https?://[A-Za-z0-9][-A-Za-z0-9.]*\.[A-Za-z]{2,}(?::[0-9]+)?/[^\s<>"'{}|\\^]+`)
+	// TelegramPostPattern matches Telegram channel and group message URLs:
+	// https://t.me/channel/12345, https://t.me/c/123456789/12345, https://t.me/s/channel/12345
+	TelegramPostPattern = regexp.MustCompile(`(?i)https?://(?:www\.)?(?:t\.me|telegram\.me)/(?:s/(?P<s_channel>[A-Za-z0-9_]{3,32})|c/(?P<c_channel>[0-9]{5,20})|(?P<channel>[A-Za-z0-9_]{3,32}))/(?P<msg_id>[0-9]{1,12})(?:[?#][^\s]*)?`)
 	// HashtagPattern matches tags like #fun #news #中文
 	HashtagPattern = regexp.MustCompile(`(?i)(?:^|[^\w])#([\p{L}\p{N}_-]{1,32})`)
 )
@@ -180,10 +183,114 @@ func ExtractGenericVideoURL(text string) (videoID, videoURL string, found bool) 
 	return videoID, raw, true
 }
 
+// ExtractTelegramMessageLink parses text and returns normalized Telegram channel post ID and URL.
+func ExtractTelegramMessageLink(text string) (videoID, videoURL string, found bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", false
+	}
+	match := TelegramPostPattern.FindStringSubmatch(text)
+	if len(match) == 0 {
+		return "", "", false
+	}
+	sChanIdx := TelegramPostPattern.SubexpIndex("s_channel")
+	cChanIdx := TelegramPostPattern.SubexpIndex("c_channel")
+	chanIdx := TelegramPostPattern.SubexpIndex("channel")
+	msgIdx := TelegramPostPattern.SubexpIndex("msg_id")
+
+	var channel string
+	var rawChan string
+	isPrivate := false
+
+	if cChanIdx > 0 && cChanIdx < len(match) && match[cChanIdx] != "" {
+		rawChan = match[cChanIdx]
+		channel = "-100" + rawChan
+		isPrivate = true
+	} else if sChanIdx > 0 && sChanIdx < len(match) && match[sChanIdx] != "" {
+		channel = match[sChanIdx]
+	} else if chanIdx > 0 && chanIdx < len(match) && match[chanIdx] != "" {
+		channel = match[chanIdx]
+	}
+
+	lowerChan := strings.ToLower(channel)
+	if lowerChan == "" || lowerChan == "joinchat" || lowerChan == "addstickers" || lowerChan == "contact" || lowerChan == "share" {
+		return "", "", false
+	}
+
+	var msgID string
+	if msgIdx > 0 && msgIdx < len(match) && match[msgIdx] != "" {
+		msgID = match[msgIdx]
+	}
+	if msgID == "" {
+		return "", "", false
+	}
+
+	if isPrivate {
+		videoID = fmt.Sprintf("c_%s_%s", rawChan, msgID)
+		videoURL = fmt.Sprintf("https://t.me/c/%s/%s", rawChan, msgID)
+	} else {
+		videoID = fmt.Sprintf("%s_%s", channel, msgID)
+		videoURL = fmt.Sprintf("https://t.me/%s/%s", channel, msgID)
+	}
+	return videoID, videoURL, true
+}
+
+// ParseTelegramChannelAndMsgID extracts channel entity name/id and message id from a Telegram URL or unique ID.
+func ParseTelegramChannelAndMsgID(input string) (channel string, msgID int64, err error) {
+	input = strings.TrimSpace(input)
+	if strings.Contains(input, "t.me/") || strings.Contains(input, "telegram.me/") {
+		match := TelegramPostPattern.FindStringSubmatch(input)
+		if len(match) > 0 {
+			sChanIdx := TelegramPostPattern.SubexpIndex("s_channel")
+			cChanIdx := TelegramPostPattern.SubexpIndex("c_channel")
+			chanIdx := TelegramPostPattern.SubexpIndex("channel")
+			msgIdx := TelegramPostPattern.SubexpIndex("msg_id")
+
+			if cChanIdx > 0 && cChanIdx < len(match) && match[cChanIdx] != "" {
+				channel = "-100" + match[cChanIdx]
+			} else if sChanIdx > 0 && sChanIdx < len(match) && match[sChanIdx] != "" {
+				channel = match[sChanIdx]
+			} else if chanIdx > 0 && chanIdx < len(match) && match[chanIdx] != "" {
+				channel = match[chanIdx]
+			}
+
+			if msgIdx > 0 && msgIdx < len(match) && match[msgIdx] != "" {
+				msgID, _ = strconv.ParseInt(match[msgIdx], 10, 64)
+			}
+			if channel != "" && msgID > 0 {
+				return channel, msgID, nil
+			}
+		}
+	}
+
+	clean := strings.TrimPrefix(input, "tg:")
+	if strings.HasPrefix(clean, "c_") {
+		parts := strings.Split(clean, "_")
+		if len(parts) >= 3 {
+			channel = "-100" + parts[1]
+			msgID, _ = strconv.ParseInt(parts[2], 10, 64)
+			if msgID > 0 {
+				return channel, msgID, nil
+			}
+		}
+	} else {
+		lastUnderscore := strings.LastIndex(clean, "_")
+		if lastUnderscore > 0 && lastUnderscore < len(clean)-1 {
+			channel = clean[:lastUnderscore]
+			msgID, _ = strconv.ParseInt(clean[lastUnderscore+1:], 10, 64)
+			if channel != "" && msgID > 0 {
+				return channel, msgID, nil
+			}
+		}
+	}
+
+	return "", 0, fmt.Errorf("无法解析 Telegram 链接或 ID: %s", input)
+}
+
 // PlatformLink holds parsed video link information across multiple platforms.
 type PlatformLink struct {
-	Platform string // "X", "YouTube", "TikTok", "Douyin", "Bilibili", "Web"
-	Prefix   string // "x:", "yt:", "tiktok:", "douyin:", "bilibili:", "url:"
+	Platform string // "X", "YouTube", "TikTok", "Douyin", "Bilibili", "Telegram", "Web"
+	Prefix   string // "x:", "yt:", "tiktok:", "douyin:", "bilibili:", "tg:", "url:"
 	ID       string
 	URL      string
 }
@@ -204,6 +311,9 @@ func ExtractPlatformLink(text string) (*PlatformLink, bool) {
 	}
 	if id, u, ok := ExtractBilibiliVideoID(text); ok {
 		return &PlatformLink{Platform: "Bilibili", Prefix: "bilibili:", ID: id, URL: u}, true
+	}
+	if id, u, ok := ExtractTelegramMessageLink(text); ok {
+		return &PlatformLink{Platform: "Telegram", Prefix: "tg:", ID: id, URL: u}, true
 	}
 	if id, u, ok := ExtractGenericVideoURL(text); ok {
 		return &PlatformLink{Platform: "Web", Prefix: "url:", ID: id, URL: u}, true

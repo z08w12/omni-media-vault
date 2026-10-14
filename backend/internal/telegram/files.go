@@ -136,6 +136,61 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 				}
 			}
 		}()
+		if strings.HasPrefix(source.UniqueID, "tg:") {
+			if !s.cfg.UserClientEnabled || s.cfg.APIID == "" || s.cfg.APIHash == "" || s.cfg.SessionString == "" {
+				cancelMonitor()
+				return out, &mediaimport.SourceError{Message: "未配置或未启用 Telegram MTProto 客户端凭据，请在后台系统设置 -> Telegram 中配置"}
+			}
+			channel, msgID, err := ytdlp.ParseTelegramChannelAndMsgID(source.UniqueID)
+			if err != nil {
+				channel, msgID, err = ytdlp.ParseTelegramChannelAndMsgID(source.FileName)
+			}
+			if err != nil {
+				cancelMonitor()
+				return out, &mediaimport.SourceError{Message: fmt.Sprintf("无法解析 Telegram 消息链接: %v", err)}
+			}
+
+			dlResult, err := DownloadMTProtoPost(ctx, s.cfg.APIID, s.cfg.APIHash, s.cfg.SessionString, channel, msgID, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
+				updateProgress(done, total)
+			})
+			cancelMonitor()
+			if err != nil {
+				return out, &mediaimport.SourceError{Message: err.Error()}
+			}
+			_ = progress(stageName, dlResult.Size, dlResult.Size)
+			if err := os.Rename(dlResult.Path, destination); err != nil {
+				data, readErr := os.ReadFile(dlResult.Path)
+				if readErr != nil {
+					return out, &mediaimport.SourceError{Message: "无法读取下载的 Telegram 视频"}
+				}
+				if writeErr := os.WriteFile(destination, data, 0644); writeErr != nil {
+					return out, &mediaimport.SourceError{Message: "无法保存下载的 Telegram 视频"}
+				}
+			}
+			if err = syncLibrary(destination, filepath.Dir(destination)); err != nil {
+				return out, &mediaimport.SourceError{Message: "无法确认 TG 视频已落盘", WaitForAvailability: true}
+			}
+			source.Size = dlResult.Size
+			source.FileName = filepath.Base(destination)
+			if dlResult.Title != "" {
+				j.RequestedTitle = dlResult.Title
+				j.ResolvedTitle = dlResult.Title
+			}
+			if len(dlResult.Tags) > 0 {
+				seen := make(map[string]bool)
+				for _, t := range j.Tags {
+					seen[t] = true
+				}
+				for _, t := range dlResult.Tags {
+					if !seen[t] {
+						seen[t] = true
+						j.Tags = append(j.Tags, t)
+					}
+				}
+			}
+			return acquiredFile(source, local, destination, dlResult.Size), nil
+		}
+
 		videos, err := ytdlp.DownloadVideoWithProgress(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
 			updateProgress(done, total)
 		})
@@ -396,6 +451,7 @@ func isExternalSource(uniqueID string) bool {
 		strings.HasPrefix(uniqueID, "tiktok:") ||
 		strings.HasPrefix(uniqueID, "douyin:") ||
 		strings.HasPrefix(uniqueID, "bilibili:") ||
+		strings.HasPrefix(uniqueID, "tg:") ||
 		strings.HasPrefix(uniqueID, "url:")
 }
 
@@ -411,6 +467,8 @@ func externalPlatformInfo(uniqueID string) (stageName, platformName string) {
 		return "douyin_download", "抖音"
 	case strings.HasPrefix(uniqueID, "bilibili:"):
 		return "bilibili_download", "Bilibili"
+	case strings.HasPrefix(uniqueID, "tg:"):
+		return "telegram_download", "Telegram"
 	default:
 		return "external_download", "外部"
 	}
