@@ -44,12 +44,24 @@ type MTProtoSignInResult struct {
 	Error         string       `json:"error,omitempty"`
 }
 
+type MTProtoFileItem struct {
+	ID       int64  `json:"id"`
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
+	MIME     string `json:"mime"`
+	IsPhoto  bool   `json:"is_photo"`
+}
+
 type MTProtoDownloadResult struct {
-	Path     string   `json:"path"`
-	Size     int64    `json:"size"`
-	Filename string   `json:"filename"`
-	Title    string   `json:"title"`
-	Tags     []string `json:"tags"`
+	Path     string            `json:"path"`
+	Size     int64             `json:"size"`
+	Filename string            `json:"filename"`
+	MIME     string            `json:"mime"`
+	Title    string            `json:"title"`
+	Tags     []string          `json:"tags"`
+	IsPhoto  bool              `json:"is_photo"`
+	Files    []MTProtoFileItem `json:"files"`
 }
 
 func FindScriptsDir() string {
@@ -411,6 +423,12 @@ func DownloadMTProtoPost(
 			if f, ok := msg["filename"].(string); ok {
 				res.Filename = f
 			}
+			if m, ok := msg["mime"].(string); ok {
+				res.MIME = m
+			}
+			if ip, ok := msg["is_photo"].(bool); ok {
+				res.IsPhoto = ip
+			}
 			if t, ok := msg["title"].(string); ok {
 				res.Title = t
 			}
@@ -420,6 +438,41 @@ func DownloadMTProtoPost(
 						res.Tags = append(res.Tags, ts)
 					}
 				}
+			}
+			if rawFiles, ok := msg["files"].([]any); ok {
+				for _, rf := range rawFiles {
+					if fm, ok := rf.(map[string]any); ok {
+						item := MTProtoFileItem{}
+						if id, ok := fm["id"].(float64); ok {
+							item.ID = int64(id)
+						}
+						if p, ok := fm["path"].(string); ok {
+							item.Path = p
+						}
+						if fn, ok := fm["filename"].(string); ok {
+							item.Filename = fn
+						}
+						if sz, ok := fm["size"].(float64); ok {
+							item.Size = int64(sz)
+						}
+						if m, ok := fm["mime"].(string); ok {
+							item.MIME = m
+						}
+						if ip, ok := fm["is_photo"].(bool); ok {
+							item.IsPhoto = ip
+						}
+						res.Files = append(res.Files, item)
+					}
+				}
+			}
+			if len(res.Files) == 0 && res.Path != "" {
+				res.Files = append(res.Files, MTProtoFileItem{
+					Path:     res.Path,
+					Filename: res.Filename,
+					Size:     res.Size,
+					MIME:     res.MIME,
+					IsPhoto:  res.IsPhoto,
+				})
 			}
 			result = res
 		case "error":

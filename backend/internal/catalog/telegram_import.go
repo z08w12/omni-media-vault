@@ -224,6 +224,19 @@ func acceptTelegramUpdate(ctx context.Context, tx *sql.Tx, receipt TelegramRecei
 	return nil
 }
 
+// LinkTelegramVideo records a completed Telegram video ID for deduplication.
+func (c *Catalog) LinkTelegramVideo(ctx context.Context, botID int64, uniqueID, fileID, jobID, videoID string) error {
+	_, err := c.db.ExecContext(ctx, `
+INSERT INTO telegram_files(bot_id, file_unique_id, file_id, job_id, video_id)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(bot_id, file_unique_id) DO UPDATE SET
+  file_id = excluded.file_id,
+  job_id = excluded.job_id,
+  video_id = excluded.video_id`,
+		botID, uniqueID, fileID, jobID, videoID)
+	return err
+}
+
 func (c *Catalog) LatestTelegramFileID(ctx context.Context, s TelegramSource) (string, error) {
 	var id string
 	err := c.db.QueryRowContext(ctx, `SELECT file_id FROM telegram_files WHERE bot_id=? AND file_unique_id=?`, s.BotID, s.UniqueID).Scan(&id)

@@ -232,15 +232,43 @@ async def do_download(args):
             }), flush=True)
             sys.exit(1)
 
-        if not msg.media:
+        # 检查是否属于相册 (Media Group / Album)
+        album_msgs = []
+        grouped_id = getattr(msg, "grouped_id", None)
+        if grouped_id:
+            try:
+                candidate_ids = list(range(max(1, msg_id - 10), msg_id + 11))
+                surrounding = await client.get_messages(entity, ids=candidate_ids)
+                album_msgs = [
+                    m for m in surrounding
+                    if m and getattr(m, "grouped_id", None) == grouped_id and getattr(m, "media", None)
+                ]
+            except Exception:
+                album_msgs = []
+
+        if not album_msgs:
+            if getattr(msg, "media", None):
+                album_msgs = [msg]
+
+        if not album_msgs:
             await client.disconnect()
             print(json.dumps({
                 "type": "error",
-                "message": f"消息 [ID: {msg_id}] 不包含视频或文件媒体"
+                "message": f"消息 [ID: {msg_id}] 不包含视频或图片等媒体内容"
             }), flush=True)
             sys.exit(1)
 
-        caption = msg.message or msg.text or ""
+        # 按消息编号正序排列
+        album_msgs.sort(key=lambda x: x.id)
+
+        # 提取标题和标签（相册内通常只有一条消息带有 caption）
+        caption = ""
+        for m in album_msgs:
+            c = m.message or m.text or ""
+            if c.strip():
+                caption = c.strip()
+                break
+
         title = ""
         for line in caption.split("\n"):
             line = line.strip()
@@ -252,86 +280,115 @@ async def do_download(args):
         if caption:
             tags = re.findall(r'#([\w\u4e00-\u9fa5]+)', caption)
 
-        file_name = None
-        file_size = 0
-        mime_type = "video/mp4"
-
-        if hasattr(msg, "file") and msg.file:
-            if msg.file.name:
-                file_name = msg.file.name
-            if msg.file.size:
-                file_size = msg.file.size
-            if msg.file.mime_type:
-                mime_type = msg.file.mime_type
-
-        if not file_name:
-            ext = ".mp4"
-            if mime_type:
-                guessed_ext = mimetypes.guess_extension(mime_type)
-                if guessed_ext:
-                    ext = guessed_ext
-            file_name = f"tg_{args.channel}_{args.msg_id}{ext}"
-
         if not title:
             title = f"Telegram-{args.channel}-{args.msg_id}"
 
-        if args.max_size > 0 and file_size > args.max_size:
-            await client.disconnect()
-            print(json.dumps({
-                "type": "error",
-                "message": f"文件大小 ({file_size} 字节) 超过单文件上限 ({args.max_size} 字节)"
-            }), flush=True)
-            sys.exit(1)
+        downloaded_files = []
+        total_items = len(album_msgs)
 
-        print(json.dumps({
-            "type": "meta",
-            "filename": file_name,
-            "size": file_size,
-            "mime": mime_type,
-            "title": title,
-            "tags": tags
-        }), flush=True)
+        for idx, m in enumerate(album_msgs):
+            is_photo = False
+            if getattr(m, "photo", None):
+                is_photo = True
 
-        target_path = os.path.join(out_dir, file_name)
+            file_name = None
+            file_size = 0
+            mime_type = "image/jpeg" if is_photo else "video/mp4"
 
-        last_report_time = 0.0
-        last_report_bytes = 0
+            if hasattr(m, "file") and m.file:
+                if m.file.name:
+                    file_name = m.file.name
+                if m.file.size:
+                    file_size = m.file.size
+                if m.file.mime_type:
+                    mime_type = m.file.mime_type
+                    if mime_type.startswith("image/"):
+                        is_photo = True
 
-        def progress_callback(current, total):
-            nonlocal last_report_time, last_report_bytes
-            now = time.time()
-            if (total and current >= total) or (now - last_report_time >= 0.5) or (current - last_report_bytes >= 2 * 1024 * 1024):
-                last_report_time = now
-                last_report_bytes = current
-                print(json.dumps({
-                    "type": "progress",
-                    "bytes": current,
-                    "total": total or 0
-                }), flush=True)
+            if not file_name:
+                ext = ".jpg" if is_photo else ".mp4"
+                if mime_type:
+                    guessed_ext = mimetypes.guess_extension(mime_type)
+                    if guessed_ext:
+                        ext = guessed_ext
+                        if ext == ".jpe":
+                            ext = ".jpg"
+                file_name = f"tg_{args.channel}_{m.id}{ext}"
 
-        downloaded_path = await client.download_media(
-            msg,
-            file=target_path,
-            progress_callback=progress_callback
-        )
+            if args.max_size > 0 and file_size > args.max_size:
+                continue
+
+            target_path = os.path.join(out_dir, file_name)
+
+            last_report_time = 0.0
+            last_report_bytes = 0
+
+            def make_progress_cb(item_idx):
+                def cb(current, total):
+                    nonlocal last_report_time, last_report_bytes
+                    now = time.time()
+                    if (total and current >= total) or (now - last_report_time >= 0.5) or (current - last_report_bytes >= 2 * 1024 * 1024):
+                        last_report_time = now
+                        last_report_bytes = current
+                        print(json.dumps({
+                            "type": "progress",
+                            "bytes": current,
+                            "total": total or 0,
+                            "item_index": item_idx,
+                            "total_items": total_items
+                        }), flush=True)
+                return cb
+
+            downloaded_path = await client.download_media(
+                m,
+                file=target_path,
+                progress_callback=make_progress_cb(idx + 1)
+            )
+
+            if downloaded_path and os.path.exists(downloaded_path):
+                actual_size = os.path.getsize(downloaded_path)
+                downloaded_files.append({
+                    "id": m.id,
+                    "path": os.path.abspath(downloaded_path),
+                    "filename": os.path.basename(downloaded_path),
+                    "size": actual_size,
+                    "mime": mime_type,
+                    "is_photo": is_photo
+                })
 
         await client.disconnect()
 
-        if not downloaded_path or not os.path.exists(downloaded_path):
+        if not downloaded_files:
             print(json.dumps({
                 "type": "error",
-                "message": "媒体下载完成但目标文件不存在"
+                "message": "媒体下载完成但未生成任何有效文件"
             }), flush=True)
             sys.exit(1)
 
-        final_size = os.path.getsize(downloaded_path)
+        # 优先选择当前 msg_id 对应的文件；若无则优先视频；最后取第一个文件
+        primary = None
+        for f in downloaded_files:
+            if f["id"] == msg_id:
+                primary = f
+                break
+        if not primary:
+            for f in downloaded_files:
+                if not f["is_photo"]:
+                    primary = f
+                    break
+        if not primary:
+            primary = downloaded_files[0]
+
         print(json.dumps({
             "type": "done",
-            "path": os.path.abspath(downloaded_path),
-            "size": final_size,
-            "filename": os.path.basename(downloaded_path),
+            "path": primary["path"],
+            "size": primary["size"],
+            "filename": primary["filename"],
+            "mime": primary["mime"],
+            "is_photo": primary["is_photo"],
             "title": title,
-            "tags": tags
+            "tags": tags,
+            "files": downloaded_files
         }), flush=True)
 
     except Exception as e:

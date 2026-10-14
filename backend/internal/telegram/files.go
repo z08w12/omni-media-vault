@@ -15,6 +15,7 @@ import (
 	"github.com/video-site/backend/internal/drives/telegramstorage"
 	"github.com/video-site/backend/internal/mediaimport"
 	"github.com/video-site/backend/internal/persistence"
+	"github.com/video-site/backend/internal/videoname"
 	"github.com/video-site/backend/internal/ytdlp"
 )
 
@@ -157,24 +158,65 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			if err != nil {
 				return out, &mediaimport.SourceError{Message: err.Error()}
 			}
-			_ = progress(stageName, dlResult.Size, dlResult.Size)
-			if err := os.Rename(dlResult.Path, destination); err != nil {
-				data, readErr := os.ReadFile(dlResult.Path)
+
+			// 确定主文件 (Primary File)
+			var primaryItem MTProtoFileItem
+			if len(dlResult.Files) > 0 {
+				for _, f := range dlResult.Files {
+					if f.Path == dlResult.Path || (f.ID != 0 && f.ID == msgID) {
+						primaryItem = f
+						break
+					}
+				}
+				if primaryItem.Path == "" {
+					primaryItem = dlResult.Files[0]
+				}
+			} else {
+				primaryItem = MTProtoFileItem{
+					Path:     dlResult.Path,
+					Filename: dlResult.Filename,
+					Size:     dlResult.Size,
+					MIME:     dlResult.MIME,
+					IsPhoto:  dlResult.IsPhoto,
+				}
+			}
+
+			_ = progress(stageName, primaryItem.Size, primaryItem.Size)
+			if err := os.Rename(primaryItem.Path, destination); err != nil {
+				data, readErr := os.ReadFile(primaryItem.Path)
 				if readErr != nil {
-					return out, &mediaimport.SourceError{Message: "无法读取下载的 Telegram 视频"}
+					return out, &mediaimport.SourceError{Message: "无法读取下载的 Telegram 媒体"}
 				}
 				if writeErr := os.WriteFile(destination, data, 0644); writeErr != nil {
-					return out, &mediaimport.SourceError{Message: "无法保存下载的 Telegram 视频"}
+					return out, &mediaimport.SourceError{Message: "无法保存下载的 Telegram 媒体"}
 				}
 			}
 			if err = syncLibrary(destination, filepath.Dir(destination)); err != nil {
-				return out, &mediaimport.SourceError{Message: "无法确认 TG 视频已落盘", WaitForAvailability: true}
+				return out, &mediaimport.SourceError{Message: "无法确认 TG 媒体已落盘", WaitForAvailability: true}
 			}
-			source.Size = dlResult.Size
+			source.Size = primaryItem.Size
 			source.FileName = filepath.Base(destination)
-			if dlResult.Title != "" {
-				j.RequestedTitle = dlResult.Title
-				j.ResolvedTitle = dlResult.Title
+			if primaryItem.MIME != "" {
+				source.MIME = primaryItem.MIME
+			}
+
+			finalTitle := dlResult.Title
+			if len(dlResult.Files) > 1 {
+				primaryIdx := 1
+				for i, item := range dlResult.Files {
+					if item.Path == primaryItem.Path || (item.ID != 0 && item.ID == primaryItem.ID) {
+						primaryIdx = i + 1
+						break
+					}
+				}
+				finalTitle = fmt.Sprintf("%s - %d", dlResult.Title, primaryIdx)
+			}
+			if finalTitle != "" {
+				j.RequestedTitle = finalTitle
+				j.ResolvedTitle = finalTitle
+			}
+			if primaryItem.IsPhoto {
+				j.Tags = append([]string{"图片"}, j.Tags...)
 			}
 			if len(dlResult.Tags) > 0 {
 				seen := make(map[string]bool)
@@ -188,7 +230,90 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 					}
 				}
 			}
-			return acquiredFile(source, local, destination, dlResult.Size), nil
+
+			// 保存相册中的其余附属文件（图片或额外视频）
+			if len(dlResult.Files) > 1 {
+				for i, extra := range dlResult.Files {
+					if extra.Path == primaryItem.Path || (extra.ID != 0 && extra.ID == primaryItem.ID) {
+						continue
+					}
+					extraIndex := i + 1
+					extraTitle := fmt.Sprintf("%s - %d", dlResult.Title, extraIndex)
+					extraExt := filepath.Ext(extra.Filename)
+					if extraExt == "" {
+						if extra.IsPhoto {
+							extraExt = ".jpg"
+						} else {
+							extraExt = ".mp4"
+						}
+					}
+					extraFileID := fmt.Sprintf("%s-%d.media", j.ID, extra.ID)
+					if extra.ID == 0 {
+						extraFileID = fmt.Sprintf("%s-extra-%d.media", j.ID, extraIndex)
+					}
+					extraDest, err := telegramstorage.Path(s.cfg.LocalFilesRoot, extraFileID)
+					if err != nil {
+						continue
+					}
+					if renameErr := os.Rename(extra.Path, extraDest); renameErr != nil {
+						data, readErr := os.ReadFile(extra.Path)
+						if readErr == nil {
+							_ = os.WriteFile(extraDest, data, 0644)
+						}
+					}
+					_ = syncLibrary(extraDest, filepath.Dir(extraDest))
+
+					_, _ = s.cat.ReserveTelegramLocalFile(ctx, catalog.TelegramLocalFile{
+						FileID: extraFileID,
+						JobID:  j.ID,
+					})
+
+					extraTags := make([]string, 0, len(dlResult.Tags)+3)
+					if extra.IsPhoto {
+						extraTags = append(extraTags, "图片")
+					}
+					extraTags = append(extraTags, "Telegram")
+					extraTags = append(extraTags, dlResult.Tags...)
+					seenTag := make(map[string]bool)
+					var cleanTags []string
+					for _, t := range extraTags {
+						t = strings.TrimSpace(t)
+						if t != "" && !seenTag[t] {
+							seenTag[t] = true
+							cleanTags = append(cleanTags, t)
+						}
+					}
+
+					storedName := videoname.UploadFileName(extraTitle, extraExt, extraFileID, false)
+					previewStatus := "pending"
+					if isImageExtension(extraExt) {
+						previewStatus = "disabled"
+					}
+					now := time.Now()
+					extraVideoID := telegramstorage.DriveID + "-" + extraFileID
+					extraVideo := &catalog.Video{
+						ID:              extraVideoID,
+						DriveID:         telegramstorage.DriveID,
+						FileID:          extraFileID,
+						FileName:        storedName,
+						Title:           extraTitle,
+						Tags:            cleanTags,
+						Size:            extra.Size,
+						Ext:             strings.TrimPrefix(extraExt, "."),
+						PreviewStatus:   previewStatus,
+						DurationSeconds: 0,
+						PublishedAt:     now,
+						CreatedAt:       now,
+						UpdatedAt:       now,
+					}
+					if err := s.cat.UpsertVideo(ctx, extraVideo); err == nil {
+						extraUniqueID := fmt.Sprintf("tg:%s/%d", channel, extra.ID)
+						_ = s.cat.LinkTelegramVideo(ctx, s.BotID(), extraUniqueID, extraFileID, j.ID, extraVideoID)
+					}
+				}
+			}
+
+			return acquiredFile(source, local, destination, primaryItem.Size), nil
 		}
 
 		videos, err := ytdlp.DownloadVideoWithProgress(ctx, source.FileName, tempJobDir, s.cfg.MaxFileSizeBytes, func(done, total int64) {
@@ -500,4 +625,12 @@ func formatBytes(bytes int64) string {
 		return fmt.Sprintf("%.1f MiB", float64(bytes)/(1024*1024))
 	}
 	return fmt.Sprintf("%.2f GiB", float64(bytes)/(1024*1024*1024))
+}
+
+func isImageExtension(ext string) bool {
+	switch strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ext), ".")) {
+	case "jpg", "jpeg", "png", "webp", "gif", "bmp":
+		return true
+	}
+	return false
 }
