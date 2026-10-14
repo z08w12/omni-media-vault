@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,6 +169,10 @@ func ExtractGenericVideoURL(text string) (videoID, videoURL string, found bool) 
 	}
 	raw := GenericURLPattern.FindString(text)
 	if raw == "" {
+		return "", "", false
+	}
+	lower := strings.ToLower(raw)
+	if strings.Contains(lower, "t.me/") || strings.Contains(lower, "telegram.me/") || strings.Contains(lower, "telegram.org/") {
 		return "", "", false
 	}
 	sum := sha256.Sum256([]byte(raw))
@@ -354,6 +359,24 @@ func FindPlatformCookiesFile(jobDir, platform string) string {
 	return FindCookiesFile(jobDir)
 }
 
+// copyFileContents copies file content from src to dst.
+func copyFileContents(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
+}
+
 // DownloadVideo downloads the video from the supported public URL into jobDir.
 func DownloadVideo(ctx context.Context, videoURL, jobDir string, maxSizeBytes int64) ([]DownloadedVideo, error) {
 	return DownloadVideoWithProgress(ctx, videoURL, jobDir, maxSizeBytes, nil)
@@ -397,7 +420,6 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		"--merge-output-format", "mp4",
 		"-o", outTmpl,
 		"--no-playlist",
-		"--no-write-cookies", // 防写回降级与防跨站污染保护
 		"--socket-timeout", "25",
 		"--retries", "3",
 		"--fragment-retries", "3",
@@ -407,7 +429,14 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		"--print-json",
 	}
 	if cookiesFile := FindPlatformCookiesFile(jobDir, platform); cookiesFile != "" {
-		args = append(args, "--cookies", cookiesFile)
+		// 复制到任务专属临时文件，防止 yt-dlp 回写覆盖或污染原 cookies 文件
+		tempCookies := filepath.Join(jobDir, ".job_cookies.txt")
+		if err := copyFileContents(cookiesFile, tempCookies); err == nil {
+			defer os.Remove(tempCookies)
+			args = append(args, "--cookies", tempCookies)
+		} else {
+			args = append(args, "--cookies", cookiesFile)
+		}
 	}
 	if maxSizeBytes > 0 {
 		args = append(args, "--max-filesize", fmt.Sprintf("%d", maxSizeBytes))
@@ -461,8 +490,9 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 		if strings.Contains(errStr, "Sign in to confirm you’re not a bot") ||
 			strings.Contains(errStr, "Sign in to confirm you're not a bot") ||
 			strings.Contains(errStr, "Sign in to confirm your age") ||
-			strings.Contains(errStr, "LOGIN_REQUIRED") {
-			return nil, fmt.Errorf("该视频需要登录验证或年龄确认 (可在服务器放置 cookies.txt 解锁)")
+			strings.Contains(errStr, "LOGIN_REQUIRED") ||
+			strings.Contains(errStr, "Fresh cookies") {
+			return nil, fmt.Errorf("该视频需要登录验证或 Cookies (可在服务器放置 cookies_%s.txt 或 cookies.txt 解锁)", strings.ToLower(platform))
 		}
 		for _, line := range strings.Split(errStr, "\n") {
 			line = strings.TrimSpace(line)

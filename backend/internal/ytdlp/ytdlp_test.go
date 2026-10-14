@@ -308,4 +308,47 @@ func TestFindPlatformCookiesFile(t *testing.T) {
 	}
 }
 
+func TestExtractGenericVideoURL_ExcludesTelegram(t *testing.T) {
+	for _, tc := range []string{
+		"https://t.me/example/1",
+		"https://t.me/renqi85/53569",
+		"https://telegram.me/channel/123",
+		"https://telegram.org/dl",
+	} {
+		if _, _, found := ExtractGenericVideoURL(tc); found {
+			t.Errorf("ExtractGenericVideoURL(%q) should be excluded, but was found", tc)
+		}
+		if _, found := ExtractPlatformLink(tc); found {
+			t.Errorf("ExtractPlatformLink(%q) should not treat telegram link as video platform", tc)
+		}
+	}
+
+	valid := "https://example.com/video.mp4"
+	id, u, found := ExtractGenericVideoURL(valid)
+	if !found || id == "" || u != valid {
+		t.Errorf("ExtractGenericVideoURL(%q) failed: got (%q, %q, %v)", valid, id, u, found)
+	}
+}
+
+func TestCopyFileContents(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "cookies.txt")
+	dst := filepath.Join(dir, "temp_cookies.txt")
+	content := "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tTEST\t1\n"
+	if err := os.WriteFile(src, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFileContents(src, dst); err != nil {
+		t.Fatalf("copyFileContents failed: %v", err)
+	}
+	copied, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(copied) != content {
+		t.Fatalf("copied content = %q, want %q", string(copied), content)
+	}
+}
+
+
 
