@@ -15,6 +15,7 @@ import (
 	"github.com/video-site/backend/internal/preview"
 	"github.com/video-site/backend/internal/proxy"
 	"github.com/video-site/backend/internal/tasklimit"
+	"github.com/video-site/backend/internal/transcode"
 )
 
 type App struct {
@@ -22,6 +23,8 @@ type App struct {
 	cat      *catalog.Catalog
 	registry *proxy.Registry
 	proxy    *proxy.Proxy
+
+	transcodeService *transcode.Service
 
 	mu                 sync.Mutex
 	workers            map[string]*preview.Worker

@@ -73,6 +73,8 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
                 loadSubtitles={loadSubtitles}
                 title={detail.title}
                 onFirstPlay={handleFirstPlay}
+                transcodeStatus={detail.transcodeStatus}
+                transcodeError={detail.transcodeError}
               />
             )}
           </div>

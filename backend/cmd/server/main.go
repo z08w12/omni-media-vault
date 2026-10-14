@@ -281,6 +281,18 @@ func main() {
 		}
 	}()
 
+	transcodeService := transcode.New(transcode.Config{
+		Catalog:   cat,
+		UploadDir: app.localUploadDir(),
+		TempDir:   filepath.Join(cfg.Storage.DataDir, "tmp"),
+		GetDrive:  app.registry.Get,
+		OnRegenPreview: func(videoID string) {
+			go app.regenPreview(ctx, videoID)
+		},
+	})
+	defer transcodeService.Close()
+	app.transcodeService = transcodeService
+
 	apiServer := &api.Server{
 		Catalog:        cat,
 		Proxy:          app.proxy,
@@ -298,21 +310,12 @@ func main() {
 			_, err := app.deleteVideo(reqCtx, videoID, false)
 			return err
 		},
-		GetTheme:          func() string { return app.Theme() },
-		GetPreviewEnabled: app.previewEnabled,
+		GetTheme:            func() string { return app.Theme() },
+		GetPreviewEnabled:   app.previewEnabled,
+		GetTranscodeStatus:  transcodeService.GetStatus,
+		PrioritizeTranscode: transcodeService.Prioritize,
 	}
 	app.onTagsChanged = apiServer.InvalidateTagCache
-
-	transcodeService := transcode.New(transcode.Config{
-		Catalog:   cat,
-		UploadDir: app.localUploadDir(),
-		TempDir:   filepath.Join(cfg.Storage.DataDir, "tmp"),
-		GetDrive:  app.registry.Get,
-		OnRegenPreview: func(videoID string) {
-			go app.regenPreview(ctx, videoID)
-		},
-	})
-	defer transcodeService.Close()
 
 	adminServer := &api.AdminServer{
 		Telegram:               telegramService,

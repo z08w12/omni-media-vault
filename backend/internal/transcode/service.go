@@ -33,6 +33,7 @@ type Task struct {
 	VideoID    string     `json:"videoId"`
 	VideoTitle string     `json:"videoTitle"`
 	Status     TaskStatus `json:"status"`
+	Reason     string     `json:"reason,omitempty"`
 	Error      string     `json:"error,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	StartedAt  *time.Time `json:"startedAt,omitempty"`
@@ -94,6 +95,10 @@ func (s *Service) Close() {
 }
 
 func (s *Service) Enqueue(ctx context.Context, videoID string) (*Task, error) {
+	return s.EnqueueWithReason(ctx, videoID, "")
+}
+
+func (s *Service) EnqueueWithReason(ctx context.Context, videoID, reason string) (*Task, error) {
 	videoID = strings.TrimSpace(videoID)
 	if videoID == "" {
 		return nil, errors.New("invalid video id")
@@ -122,6 +127,7 @@ func (s *Service) Enqueue(ctx context.Context, videoID string) (*Task, error) {
 		VideoID:    videoID,
 		VideoTitle: v.Title,
 		Status:     StatusPending,
+		Reason:     reason,
 		CreatedAt:  time.Now(),
 	}
 	s.tasks[videoID] = task
@@ -134,6 +140,34 @@ func (s *Service) Enqueue(ctx context.Context, videoID string) (*Task, error) {
 
 	cp := *task
 	return &cp, nil
+}
+
+// Prioritize moves a pending transcode task to the front of the queue,
+// giving it immediate precedence once the current active job completes.
+func (s *Service) Prioritize(videoID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[videoID]
+	if !ok || task.Status != StatusPending {
+		return false
+	}
+
+	newQueue := make([]string, 0, len(s.queue))
+	newQueue = append(newQueue, videoID)
+	for _, id := range s.queue {
+		if id != videoID {
+			newQueue = append(newQueue, id)
+		}
+	}
+	s.queue = newQueue
+
+	select {
+	case s.taskCh <- videoID:
+	default:
+	}
+
+	return true
 }
 
 func (s *Service) GetStatus(videoID string) *Task {
@@ -190,6 +224,22 @@ func (s *Service) worker() {
 	defer s.wg.Done()
 
 	for {
+		var nextVideoID string
+
+		s.mu.Lock()
+		for _, id := range s.queue {
+			if t, ok := s.tasks[id]; ok && t.Status == StatusPending {
+				nextVideoID = id
+				break
+			}
+		}
+		s.mu.Unlock()
+
+		if nextVideoID != "" {
+			s.runNext(nextVideoID)
+			continue
+		}
+
 		select {
 		case <-s.ctx.Done():
 			return
@@ -197,6 +247,91 @@ func (s *Service) worker() {
 			s.runNext(videoID)
 		}
 	}
+}
+
+// CheckAndEnqueue performs an immediate fast probe on an ingested video.
+// If the video is detected as incompatible with modern browser playback,
+// it is automatically enqueued into the transcode background worker.
+func (s *Service) CheckAndEnqueue(ctx context.Context, videoID string) (bool, string, error) {
+	videoID = strings.TrimSpace(videoID)
+	if videoID == "" || s.cfg.Catalog == nil {
+		return false, "", errors.New("invalid video or catalog unavailable")
+	}
+
+	v, err := s.cfg.Catalog.GetVideo(ctx, videoID)
+	if err != nil {
+		return false, "", fmt.Errorf("lookup video %s: %w", videoID, err)
+	}
+
+	// 1. If storage kind is not local-writable, skip
+	if !IsSupportedLocalDrive(v.DriveID) {
+		return false, "unsupported storage kind for in-place transcode", nil
+	}
+
+	// 2. Resolve source path
+	sourcePath, isLocal, err := s.resolveSourcePath(ctx, v)
+	if err != nil || sourcePath == "" || !isLocal {
+		return false, "source file not accessible locally", nil
+	}
+
+	// 3. Fast probe file
+	info, err := ProbeFile(ctx, s.cfg.FFprobePath, sourcePath)
+	if err != nil {
+		return false, "", fmt.Errorf("probe file: %w", err)
+	}
+
+	// 4. Check compatibility
+	result := CheckCompatibility(info, v.Ext)
+	if result.Compatible {
+		return false, "", nil
+	}
+
+	// 5. Incompatible: enqueue for transcode
+	_, err = s.EnqueueWithReason(ctx, videoID, result.Reason)
+	if err != nil {
+		return false, "", fmt.Errorf("auto-enqueue transcode: %w", err)
+	}
+
+	log.Printf("[transcode] auto-enqueued video %s (%s, ext: %s) for transcode: %s", videoID, v.Title, v.Ext, result.Reason)
+	return true, result.Reason, nil
+}
+
+func (s *Service) resolveSourcePath(ctx context.Context, v *catalog.Video) (string, bool, error) {
+	if s.cfg.GetDrive != nil {
+		if drv, ok := s.cfg.GetDrive(v.DriveID); ok && drv != nil {
+			if lfp, ok := drv.(drives.LocalFileProvider); ok {
+				if p, err := lfp.LocalPath(ctx, v.FileID); err == nil && p != "" {
+					return p, true, nil
+				}
+			}
+		}
+	}
+
+	if v.DriveID == localupload.DriveID && s.cfg.UploadDir != "" {
+		p := filepath.Join(s.cfg.UploadDir, v.FileID)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p, true, nil
+		}
+	}
+
+	if s.cfg.GetDrive != nil {
+		if drv, ok := s.cfg.GetDrive(v.DriveID); ok && drv != nil {
+			link, err := drv.StreamURL(ctx, v.FileID)
+			if err != nil {
+				return "", false, fmt.Errorf("resolve stream url: %w", err)
+			}
+			if link != nil && link.URL != "" {
+				if filepath.IsAbs(link.URL) {
+					if info, err := os.Stat(link.URL); err == nil && !info.IsDir() {
+						return link.URL, true, nil
+					}
+				}
+				return link.URL, false, nil
+			}
+		}
+	}
+
+	return "", false, fmt.Errorf("unable to locate video source path for %s", v.ID)
 }
 
 func (s *Service) runNext(videoID string) {
@@ -245,53 +380,9 @@ func (s *Service) executeTranscode(ctx context.Context, videoID string) error {
 		return fmt.Errorf("lookup video %s: %w", videoID, err)
 	}
 
-	var (
-		sourcePath  string
-		isLocalFile bool
-	)
-
-	// 1. Resolve source file path or URL
-	if s.cfg.GetDrive != nil {
-		if drv, ok := s.cfg.GetDrive(v.DriveID); ok && drv != nil {
-			if lfp, ok := drv.(drives.LocalFileProvider); ok {
-				if p, err := lfp.LocalPath(ctx, v.FileID); err == nil && p != "" {
-					sourcePath = p
-					isLocalFile = true
-				}
-			}
-		}
-	}
-
-	if sourcePath == "" && v.DriveID == localupload.DriveID && s.cfg.UploadDir != "" {
-		p := filepath.Join(s.cfg.UploadDir, v.FileID)
-		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			sourcePath = p
-			isLocalFile = true
-		}
-	}
-
-	if sourcePath == "" && s.cfg.GetDrive != nil {
-		if drv, ok := s.cfg.GetDrive(v.DriveID); ok && drv != nil {
-			link, err := drv.StreamURL(ctx, v.FileID)
-			if err != nil {
-				return fmt.Errorf("resolve stream url: %w", err)
-			}
-			if link != nil && link.URL != "" {
-				if filepath.IsAbs(link.URL) {
-					if info, err := os.Stat(link.URL); err == nil && !info.IsDir() {
-						sourcePath = link.URL
-						isLocalFile = true
-					}
-				}
-				if sourcePath == "" {
-					sourcePath = link.URL
-				}
-			}
-		}
-	}
-
-	if sourcePath == "" {
-		return fmt.Errorf("unable to locate video source path for %s", videoID)
+	sourcePath, isLocalFile, err := s.resolveSourcePath(ctx, v)
+	if err != nil {
+		return err
 	}
 
 	// 2. Prepare temporary output path

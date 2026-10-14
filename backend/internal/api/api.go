@@ -32,6 +32,7 @@ import (
 	"github.com/video-site/backend/internal/proxy"
 	"github.com/video-site/backend/internal/subtitles"
 	"github.com/video-site/backend/internal/tagging"
+	"github.com/video-site/backend/internal/transcode"
 	"github.com/video-site/backend/internal/videoname"
 )
 
@@ -59,6 +60,8 @@ type Server struct {
 	// 删除库中记录 + 本地封面/预览，保留网盘源文件，并写黑名单墓碑
 	// （扫盘不再入库）。未注入时回退为旧的 hidden 标记。
 	OnHideVideo func(ctx context.Context, videoID string) error
+	GetTranscodeStatus  func(videoID string) *transcode.Task
+	PrioritizeTranscode func(videoID string) bool
 
 	tagCacheMu      sync.Mutex
 	tagCacheUntil   time.Time
@@ -179,6 +182,8 @@ type VideoDetailDTO struct {
 	AuthorProfile       AuthorProfile `json:"authorProfile"`
 	CollectionCandidate bool          `json:"collectionCandidate,omitempty"`
 	CommentsList        []Comment     `json:"commentsList"`
+	TranscodeStatus     string        `json:"transcodeStatus,omitempty"`
+	TranscodeError      string        `json:"transcodeError,omitempty"`
 }
 
 type VideoCollectionSummary struct {
@@ -443,14 +448,25 @@ func (s *Server) handleVideoDetail(w http.ResponseWriter, r *http.Request) {
 	dto := mapVideo(v)
 	dto.SourceLabel = s.videoSourceLabel(r.Context(), v)
 
+	var transcodeStatus, transcodeError string
+	if s.GetTranscodeStatus != nil {
+		if task := s.GetTranscodeStatus(v.ID); task != nil {
+			transcodeStatus = string(task.Status)
+			transcodeError = task.Error
+			if task.Status == transcode.StatusPending && s.PrioritizeTranscode != nil {
+				s.PrioritizeTranscode(v.ID)
+			}
+		}
+	}
+
 	detail := VideoDetailDTO{
-		VideoDTO:    dto,
-		VideoSrc:    s.videoSource(v),
-		MediaType:   playbackMediaType(v),
-		Poster:      thumbnailURL(v),
-		Description: v.Description,
-		EmbedURL:    fmt.Sprintf(`<iframe src="/embed/%s" width="640" height="360" frameborder="0" allowfullscreen></iframe>`, pathSegment(v.ID)),
-		AuthorProfile: AuthorProfile{
+		VideoDTO:            dto,
+		VideoSrc:            s.videoSource(v),
+		MediaType:           playbackMediaType(v),
+		Poster:              thumbnailURL(v),
+		Description:         v.Description,
+		EmbedURL:            fmt.Sprintf(`<iframe src="/embed/%s" width="640" height="360" frameborder="0" allowfullscreen></iframe>`, pathSegment(v.ID)),
+		AuthorProfile:       AuthorProfile{
 			ID:     "author-" + v.Author,
 			Name:   v.Author,
 			Href:   "/author/" + v.Author,
@@ -458,6 +474,8 @@ func (s *Server) handleVideoDetail(w http.ResponseWriter, r *http.Request) {
 		},
 		CollectionCandidate: strings.TrimSpace(v.ParentID) != "",
 		CommentsList:        []Comment{},
+		TranscodeStatus:     transcodeStatus,
+		TranscodeError:      transcodeError,
 	}
 	// Reactions and editable metadata must stay fresh across detail navigations.
 	w.Header().Set("Cache-Control", "no-store")

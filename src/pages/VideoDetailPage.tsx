@@ -268,6 +268,28 @@ function VideoDetailContent({ id }: { id?: string }) {
   ]);
 
   useEffect(() => {
+    if (!id || !detail) return;
+    if (detail.transcodeStatus !== "pending" && detail.transcodeStatus !== "processing") return;
+
+    const timer = window.setInterval(() => {
+      fetchVideoDetail(id)
+        .then((latest) => {
+          if (latest) {
+            rememberVideoDetail({ detail: latest });
+            setDetail(latest);
+          }
+        })
+        .catch(() => {
+          // ignore transient poll error
+        });
+    }, 3000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [id, detail?.transcodeStatus]);
+
+  useEffect(() => {
     if (!id) {
       setRecommendations([]);
       setRecommendationsLoading(false);
@@ -557,6 +579,8 @@ function VideoDetailContent({ id }: { id?: string }) {
           loadSubtitles={loadSubtitles}
           title={detail.title}
           onFirstPlay={handleFirstPlay}
+          transcodeStatus={detail.transcodeStatus}
+          transcodeError={detail.transcodeError}
         />
         <div className="vd-detail-panels">
           <section className="vd-summary" aria-label="当前视频">

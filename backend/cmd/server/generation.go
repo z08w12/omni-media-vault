@@ -13,6 +13,7 @@ import (
 	"github.com/video-site/backend/internal/fingerprint"
 	"github.com/video-site/backend/internal/persistence"
 	"github.com/video-site/backend/internal/preview"
+	"github.com/video-site/backend/internal/transcode"
 )
 
 func (a *App) enqueueUploadedVideo(ctx context.Context, v *catalog.Video) {
@@ -33,7 +34,22 @@ func (a *App) enqueueUploadedVideo(ctx context.Context, v *catalog.Video) {
 	if thumbWorker != nil && v.ThumbnailURL == "" {
 		thumbWorker.Enqueue(v)
 	}
-	if worker != nil && a.previewEnabled() {
+
+	// 1. Fast probe & auto transcode for modern web compatibility
+	var enqueuedForTranscode bool
+	if a.transcodeService != nil && transcode.IsSupportedLocalDrive(v.DriveID) {
+		enqueued, reason, err := a.transcodeService.CheckAndEnqueue(ctx, v.ID)
+		if err != nil {
+			log.Printf("[transcode] fast probe check failed for video %s: %v", v.ID, err)
+		} else if enqueued {
+			enqueuedForTranscode = true
+			log.Printf("[transcode] video %s (%s) enqueued for compatibility transcode: %s", v.ID, v.Title, reason)
+		}
+	}
+
+	// If the video is being transcoded to a browser-compatible MP4, defer preview teaser slice
+	// generation until transcode finishes, which will automatically invoke OnRegenPreview.
+	if !enqueuedForTranscode && worker != nil && a.previewEnabled() {
 		worker.Enqueue(v)
 	}
 	if fingerprintWorker != nil {

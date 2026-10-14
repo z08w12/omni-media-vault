@@ -133,6 +133,8 @@ export const DesktopVideoDetail = memo(function DesktopVideoDetail({
                     loadSubtitles={loadSubtitles}
                     title={detail.title}
                     onFirstPlay={handleFirstPlay}
+                    transcodeStatus={detail.transcodeStatus}
+                    transcodeError={detail.transcodeError}
                   />
                 )}
               </div>

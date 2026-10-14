@@ -52,6 +52,8 @@ type Props = {
    * 后续暂停-继续不会重复触发。换 src 时会重置（详情页切换视频用）。
    */
   onFirstPlay?: () => void;
+  transcodeStatus?: "pending" | "processing" | "completed" | "failed" | "";
+  transcodeError?: string;
 };
 
 type PlayerError = {
@@ -215,6 +217,8 @@ export function VideoPlayer({
   loadSubtitles,
   title,
   onFirstPlay,
+  transcodeStatus,
+  transcodeError,
 }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const artRef = useRef<Artplayer | null>(null);
@@ -228,6 +232,9 @@ export function VideoPlayer({
   const [previewHover, setPreviewHover] = useState<PreviewHover | null>(null);
   const gestureHudTimerRef = useRef<number | null>(null);
 
+  const isTranscoding =
+    transcodeStatus === "pending" || transcodeStatus === "processing";
+
   useEffect(() => {
     onFirstPlayRef.current = onFirstPlay;
   }, [onFirstPlay]);
@@ -238,7 +245,7 @@ export function VideoPlayer({
 
   useEffect(() => {
     const mount = mountRef.current;
-    if (!mount) return;
+    if (!mount || isTranscoding) return;
 
     playedRef.current = false;
     setPlayerError(null);
@@ -262,7 +269,7 @@ export function VideoPlayer({
     });
 
     return cleanupPlayer;
-  }, [id, poster, preferTypedMp4SourceOnIOS, retryNonce, src, title]);
+  }, [id, isTranscoding, poster, preferTypedMp4SourceOnIOS, retryNonce, src, title]);
 
   useEffect(() => {
     return () => {
@@ -311,6 +318,50 @@ export function VideoPlayer({
   return (
     <div className="video-player">
       <div ref={mountRef} className="video-player__mount" />
+
+      {isTranscoding && (
+        <div className="video-player__transcoding" role="status" aria-live="polite">
+          {poster && (
+            <img
+              src={poster}
+              alt=""
+              className="video-player__transcoding-bg"
+              aria-hidden="true"
+            />
+          )}
+          <div className="video-player__transcoding-backdrop" />
+          <div className="video-player__transcoding-card">
+            <div className="video-player__transcoding-spinner" />
+            <div className="video-player__transcoding-title">
+              {transcodeStatus === "processing"
+                ? "视频高清兼容转码中"
+                : "转码队列排队中"}
+            </div>
+            <div className="video-player__transcoding-desc">
+              {transcodeStatus === "processing"
+                ? "系统正在将该视频转换为浏览器原生播放格式，转码完成后将自动起播..."
+                : "已自动为您加速排队，稍候即将开始转码..."}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transcodeStatus === "failed" && !playerError && (
+        <div className="video-player__error" role="alert">
+          <div className="video-player__error-title">视频格式暂不支持播放</div>
+          <div className="video-player__error-message">
+            {transcodeError || "自动转码未成功，原视频文件可能格式损坏或不受支持。"}
+          </div>
+          <div className="video-player__error-actions">
+            <button type="button" onClick={retryPlayback}>
+              重试
+            </button>
+            <button type="button" onClick={copySource}>
+              复制地址
+            </button>
+          </div>
+        </div>
+      )}
 
       {playerError && (
         <div className="video-player__error" role="alert">

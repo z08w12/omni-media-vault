@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -58,29 +59,51 @@ func TestTranscodeQueueConcurrency(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(uploadDir, "test1.avi"), []byte("dummy-video-data-1"), 0o644)
 	_ = os.WriteFile(filepath.Join(uploadDir, "test2.mkv"), []byte("dummy-video-data-2"), 0o644)
 
-	// Create a stub ffmpeg script that outputs a dummy mp4
-	stubFFmpeg := filepath.Join(tempDir, "ffmpeg")
-	stubScript := `#!/usr/bin/env bash
-# simulate encoding
+	var stubFFmpeg, stubFFprobe string
+	if runtime.GOOS == "windows" {
+		stubFFmpeg = filepath.Join(tempDir, "ffmpeg.bat")
+		// In Windows batch, loop to get the last argument
+		stubScript := `@echo off
+setlocal enabledelayedexpansion
+for %%a in (%*) do set last=%%a
+echo fake mp4 content > "!last!"
+exit /b 0
+`
+		if err := os.WriteFile(stubFFmpeg, []byte(stubScript), 0o755); err != nil {
+			t.Fatalf("write stub ffmpeg: %v", err)
+		}
+
+		stubFFprobe = filepath.Join(tempDir, "ffprobe.bat")
+		stubProbeScript := `@echo off
+echo 42.0
+exit /b 0
+`
+		if err := os.WriteFile(stubFFprobe, []byte(stubProbeScript), 0o755); err != nil {
+			t.Fatalf("write stub ffprobe: %v", err)
+		}
+	} else {
+		stubFFmpeg = filepath.Join(tempDir, "ffmpeg")
+		stubScript := `#!/usr/bin/env bash
 dest="${@: -1}"
 echo "fake mp4 content" > "$dest"
 sleep 0.1
 `
-	if err := os.WriteFile(stubFFmpeg, []byte(stubScript), 0o755); err != nil {
-		t.Fatalf("write stub ffmpeg: %v", err)
-	}
+		if err := os.WriteFile(stubFFmpeg, []byte(stubScript), 0o755); err != nil {
+			t.Fatalf("write stub ffmpeg: %v", err)
+		}
 
-	stubFFprobe := filepath.Join(tempDir, "ffprobe")
-	stubProbeScript := `#!/usr/bin/env bash
+		stubFFprobe = filepath.Join(tempDir, "ffprobe")
+		stubProbeScript := `#!/usr/bin/env bash
 echo "42.0"
 `
-	if err := os.WriteFile(stubFFprobe, []byte(stubProbeScript), 0o755); err != nil {
-		t.Fatalf("write stub ffprobe: %v", err)
+		if err := os.WriteFile(stubFFprobe, []byte(stubProbeScript), 0o755); err != nil {
+			t.Fatalf("write stub ffprobe: %v", err)
+		}
 	}
 
 	svc := New(Config{
 		FFmpegPath:  stubFFmpeg,
-		FFprobePath: stubProbeScript,
+		FFprobePath: stubFFprobe,
 		TempDir:     tempDir,
 		UploadDir:   uploadDir,
 		Catalog:     cat,
@@ -141,3 +164,56 @@ echo "42.0"
 		t.Fatalf("new file test1.mp4 missing: %v", err)
 	}
 }
+
+func TestPrioritize(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "catalog.db")
+	cat, err := catalog.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	defer cat.Close()
+
+	now := time.Now()
+	for _, id := range []string{"v-a", "v-b", "v-c"} {
+		_ = cat.UpsertVideo(ctx, &catalog.Video{
+			ID:          id,
+			DriveID:     "local-upload",
+			FileID:      id + ".mp4",
+			FileName:    id + ".mp4",
+			Title:       id,
+			Ext:         "mp4",
+			PublishedAt: now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	}
+
+	svc := New(Config{
+		Catalog: cat,
+	})
+	defer svc.Close()
+
+	// Enqueue without running worker
+	svc.mu.Lock()
+	svc.tasks["v-a"] = &Task{VideoID: "v-a", Status: StatusPending}
+	svc.tasks["v-b"] = &Task{VideoID: "v-b", Status: StatusPending}
+	svc.tasks["v-c"] = &Task{VideoID: "v-c", Status: StatusPending}
+	svc.queue = []string{"v-a", "v-b", "v-c"}
+	svc.mu.Unlock()
+
+	// Prioritize v-c
+	ok := svc.Prioritize("v-c")
+	if !ok {
+		t.Fatalf("expected Prioritize to succeed")
+	}
+
+	qStatus := svc.GetQueueStatus()
+	if len(qStatus.Pending) != 3 {
+		t.Fatalf("expected 3 pending tasks, got %d", len(qStatus.Pending))
+	}
+	if qStatus.Pending[0].VideoID != "v-c" {
+		t.Fatalf("expected v-c to be at front of queue, got %s", qStatus.Pending[0].VideoID)
+	}
+}
+

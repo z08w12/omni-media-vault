@@ -73,6 +73,8 @@ export type VideoDetail = VideoItem & {
   /** The source row has a directory; its collection summary loads separately. */
   collectionCandidate?: boolean;
   commentsList: CommentItem[];
+  transcodeStatus?: "pending" | "processing" | "completed" | "failed" | "";
+  transcodeError?: string;
 };
 
 export type VideoSubtitle = {
