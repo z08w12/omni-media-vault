@@ -11,6 +11,7 @@ import {
 import {
   Check,
   Clock3,
+  Cookie,
   Film,
   Loader2,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
 import { TelegramIcon } from "@/components/icons/TelegramIcon";
 import { useSearchParams } from "react-router";
 import { TelegramSettingsSection } from "./settings/TelegramSettingsSection";
+import { CookiesSettingsSection } from "./settings/CookiesSettingsSection";
 import { invalidateTagsCache } from "@/data/videos";
 import * as api from "./api";
 import { useToast } from "@/components/ToastContext";
@@ -74,7 +76,7 @@ type PendingSave = {
 };
 
 type EditorTab = "visual" | "source";
-type SectionID = "config-automation" | "config-preview" | "config-tags" | "config-telegram";
+type SectionID = "config-automation" | "config-preview" | "config-tags" | "config-telegram" | "config-cookies";
 
 const NIGHTLY_TIMEZONE_OPTIONS = [
   "Asia/Shanghai",
@@ -131,6 +133,11 @@ const SECTION_META: Array<{
     title: "Telegram",
     icon: TelegramIcon,
   },
+  {
+    id: "config-cookies",
+    title: "平台 Cookie",
+    icon: Cookie,
+  },
 ];
 
 type ConfigPageMetaProps = {
@@ -166,6 +173,7 @@ export function SettingsPage() {
     ({ id }) => id === `config-${searchParams.get("section")}`
   )?.id ?? "config-automation";
   const telegramSelected = activeTab === "visual" && activeSection === "config-telegram";
+  const cookiesSelected = activeTab === "visual" && activeSection === "config-cookies";
   const [sourceError, setSourceError] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -181,7 +189,7 @@ export function SettingsPage() {
   }
 
   useEffect(() => {
-    if (activeSection === "config-telegram") {
+    if (activeSection === "config-telegram" || activeSection === "config-cookies") {
       setActiveTab("visual");
     }
   }, [activeSection]);
@@ -537,7 +545,7 @@ export function SettingsPage() {
               type="button"
               aria-pressed={activeTab === "source"}
               className={activeTab === "source" ? "is-active" : ""}
-              disabled={loading || saving}
+              disabled={loading || saving || cookiesSelected}
               onClick={() => handleTabChange("source")}
             >
               源码编辑
@@ -796,6 +804,7 @@ export function SettingsPage() {
                 </SettingsSection>
               )}
               <TelegramSettingsSection active={telegramSelected} disabled={controlsDisabled} draft={draft} onChange={updateVisualField} />
+              <CookiesSettingsSection active={cookiesSelected} />
             </form>
           </div>
         </div>
@@ -810,46 +819,48 @@ export function SettingsPage() {
           </form>
         )}
 
-        <div
-          className="admin-config-actions"
-          data-admin-floating-actions
-          role="status"
-          aria-live="polite"
-        >
-          <span className={`admin-config-actions__status ${statusClass}`}>{statusText}</span>
-          <button
-            type="button"
-            className="admin-config-actions__button"
-            onClick={resetDraft}
-            disabled={controlsDisabled || !dirty}
-            title="还原更改"
-            aria-label="还原更改"
+        {!cookiesSelected && (
+          <div
+            className="admin-config-actions"
+            data-admin-floating-actions
+            role="status"
+            aria-live="polite"
           >
-            <RefreshCw size={16} aria-hidden="true" />
-          </button>
-          <button
-            type="submit"
-            className="admin-config-actions__button"
-            disabled={
-              controlsDisabled ||
-              !dirty ||
-              !timeValid ||
-              !timezoneValid ||
-              !generationConcurrencyValid ||
-              Boolean(sourceError)
-            }
-            form={activeTab === "source" ? "config-source-form" : "config-visual-form"}
-            title="预览并保存配置"
-            aria-label="预览并保存配置"
-          >
-            {saving ? (
-              <Loader2 size={16} className="admin-spin" aria-hidden="true" />
-            ) : (
-              <Check size={16} aria-hidden="true" />
-            )}
-            {dirty && <span className="admin-config-actions__dirty-dot" aria-hidden="true" />}
-          </button>
-        </div>
+            <span className={`admin-config-actions__status ${statusClass}`}>{statusText}</span>
+            <button
+              type="button"
+              className="admin-config-actions__button"
+              onClick={resetDraft}
+              disabled={controlsDisabled || !dirty}
+              title="还原更改"
+              aria-label="还原更改"
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="submit"
+              className="admin-config-actions__button"
+              disabled={
+                controlsDisabled ||
+                !dirty ||
+                !timeValid ||
+                !timezoneValid ||
+                !generationConcurrencyValid ||
+                Boolean(sourceError)
+              }
+              form={activeTab === "source" ? "config-source-form" : "config-visual-form"}
+              title="预览并保存配置"
+              aria-label="预览并保存配置"
+            >
+              {saving ? (
+                <Loader2 size={16} className="admin-spin" aria-hidden="true" />
+              ) : (
+                <Check size={16} aria-hidden="true" />
+              )}
+              {dirty && <span className="admin-config-actions__dirty-dot" aria-hidden="true" />}
+            </button>
+          </div>
+        )}
       </div>
 
       {pendingSave && (

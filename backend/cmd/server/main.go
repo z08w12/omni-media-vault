@@ -24,6 +24,7 @@ import (
 	"github.com/video-site/backend/internal/backuptransfer"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/config"
+	"github.com/video-site/backend/internal/cookiemanager"
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 	"github.com/video-site/backend/internal/fingerprint"
 	"github.com/video-site/backend/internal/mediaimport"
@@ -317,6 +318,18 @@ func main() {
 	}
 	app.onTagsChanged = apiServer.InvalidateTagCache
 
+	cookieManager, err := cookiemanager.New(cookiemanager.Config{
+		DataDir: filepath.Join(cfg.Storage.DataDir, "cookies"),
+		LegacyDirs: []string{
+			"/opt/video-site-91",
+			filepath.Dir(cfgPath),
+			".",
+		},
+	})
+	if err != nil {
+		log.Printf("[cookies] init cookie manager: %v", err)
+	}
+
 	adminServer := &api.AdminServer{
 		Telegram:               telegramService,
 		Imports:                remoteUploader,
@@ -324,6 +337,7 @@ func main() {
 		Auth:                   authr,
 		Backups:                backupManager,
 		BackupTransfers:        backupTransferManager,
+		Cookies:                cookieManager,
 		Logs:                   logStore,
 		ConfigManager:          configManager,
 		VersionFilePath:        versionFilePath,

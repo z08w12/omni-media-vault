@@ -1204,3 +1204,54 @@ export const resumeTelegram = () => request<void>("/telegram/resume", {method:"P
 export const listTelegramImports = (limit: number) => request<ImportJob[]>(`/import-jobs?${new URLSearchParams({source: "telegram", limit: String(limit)})}`);
 export const cancelImport = (id: string) => request<ImportJob>(`/import-jobs/${encodeURIComponent(id)}/cancel`, {method:"POST"});
 export const retryImport = (id: string) => request<void>(`/import-jobs/${encodeURIComponent(id)}/retry`, {method:"POST"});
+
+// ---------- Platform Cookies ----------
+
+export type PlatformCookieStatus = {
+  platform: string;
+  displayName: string;
+  fileName: string;
+  exists: boolean;
+  size: number;
+  modTime?: string;
+  lineCount: number;
+  sha256?: string;
+  hasBackup: boolean;
+};
+
+export type CookieContentResponse = {
+  platform: string;
+  content: string;
+};
+
+export const listCookies = (signal?: AbortSignal) =>
+  request<PlatformCookieStatus[]>("/cookies", { signal });
+
+export const getCookieContent = (platform: string, signal?: AbortSignal) =>
+  request<CookieContentResponse>(`/cookies/${encodeURIComponent(platform)}`, { signal });
+
+export const saveCookieContent = (platform: string, content: string) =>
+  request<{ platform: string; status: string }>(`/cookies/${encodeURIComponent(platform)}`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+
+export const uploadCookieFile = (platform: string, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<{ platform: string; status: string }>(`/cookies/${encodeURIComponent(platform)}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const deleteCookie = (platform: string) =>
+  request<{ platform: string; status: string }>(`/cookies/${encodeURIComponent(platform)}`, {
+    method: "DELETE",
+  });
+
+export const restoreCookie = (platform: string) =>
+  request<{ platform: string; status: string }>(`/cookies/${encodeURIComponent(platform)}/restore`, {
+    method: "POST",
+  });
+

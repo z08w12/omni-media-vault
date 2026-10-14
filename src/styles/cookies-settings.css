@@ -1,0 +1,258 @@
+/* =========================================================
+ * Platform Cookies Management Styles
+ * ========================================================= */
+
+.admin-cookies-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  width: 100%;
+}
+
+.cookies-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background: color-mix(in srgb, var(--accent, #f59e0b) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent, #f59e0b) 30%, transparent);
+  border-radius: var(--radius-md, 12px);
+  font-size: var(--font-base, 13px);
+  line-height: var(--line-relaxed, 1.6);
+  color: var(--text-default);
+}
+
+.cookies-info-banner__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent, #f59e0b);
+}
+
+.cookies-info-banner strong {
+  color: var(--text-strong);
+}
+
+.cookies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4, 16px);
+  width: 100%;
+}
+
+.cookie-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-4, 16px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+
+.cookie-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.cookie-card.is-configured {
+  border-left: 3px solid #10b981;
+}
+
+.cookie-card.is-empty {
+  border-left: 3px solid var(--border-default);
+  opacity: 0.88;
+}
+
+.cookie-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-3, 12px);
+}
+
+.cookie-card__title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+}
+
+.cookie-card__platform-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--accent, #6366f1) 12%, var(--bg-page));
+  color: var(--accent, #6366f1);
+  flex-shrink: 0;
+}
+
+.cookie-card__title {
+  font-size: var(--font-md, 14px);
+  font-weight: var(--weight-semibold, 600);
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cookie-card__filename {
+  font-size: var(--font-xs, 11px);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+}
+
+.cookie-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-xs, 11px);
+  font-weight: var(--weight-medium, 500);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  flex-shrink: 0;
+}
+
+.cookie-badge.is-success {
+  background: color-mix(in srgb, #10b981 15%, transparent);
+  color: #10b981;
+  border: 1px solid color-mix(in srgb, #10b981 30%, transparent);
+}
+
+.cookie-badge.is-muted {
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+}
+
+.cookie-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) 0;
+  font-size: var(--font-sm, 12px);
+  color: var(--text-default);
+  flex-grow: 1;
+}
+
+.cookie-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  padding: 3px 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--border-default) 60%, transparent);
+}
+
+.cookie-stat-row:last-child {
+  border-bottom: none;
+}
+
+.cookie-stat-row__label {
+  color: var(--text-muted);
+}
+
+.cookie-stat-row__value {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cookie-sha256-code {
+  font-size: var(--font-xs, 11px);
+  background: color-mix(in srgb, var(--text-default) 6%, transparent);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs, 4px);
+  cursor: pointer;
+  user-select: all;
+}
+
+.cookie-card__backup-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: var(--font-xs, 11px);
+  color: var(--text-muted);
+}
+
+.cookie-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-3, 12px);
+  padding-top: var(--space-3, 12px);
+  border-top: 1px solid var(--border-default);
+  flex-wrap: wrap;
+}
+
+.cookie-card__actions .admin-btn {
+  flex: 1 1 auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: var(--font-xs, 11px);
+}
+
+.cookie-card__actions .admin-btn.is-icon-only {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+}
+
+/* Modal text editor */
+.cookie-editor-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  min-width: 0;
+  width: 100%;
+}
+
+.cookie-editor-dialog__tip {
+  font-size: var(--font-sm, 12px);
+  color: var(--text-muted);
+  line-height: var(--line-normal, 1.5);
+  background: color-mix(in srgb, var(--bg-page) 60%, var(--bg-surface));
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-default);
+}
+
+.cookie-editor-dialog__textarea {
+  width: 100%;
+  height: 380px;
+  min-height: 200px;
+  box-sizing: border-box;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-sm, 12px);
+  line-height: 1.5;
+  background: var(--bg-page);
+  color: var(--text-strong);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm, 8px);
+  padding: 12px;
+  resize: vertical;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.cookie-editor-dialog__textarea:focus {
+  outline: 2px solid var(--accent);
+  border-color: var(--accent);
+}
+
+.cookie-editor-dialog__footer-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-xs, 11px);
+  color: var(--text-muted);
+}

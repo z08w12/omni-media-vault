@@ -307,7 +307,10 @@ type ytdlpJSON struct {
 func FindCookiesFile(jobDir string) string {
 	candidates := []string{
 		filepath.Join(jobDir, "cookies.txt"),
+		filepath.Join(jobDir, "cookies", "cookies.txt"),
+		"/opt/video-site-91/data/cookies/cookies.txt",
 		"/opt/video-site-91/cookies.txt",
+		"data/cookies/cookies.txt",
 		"/etc/yt-dlp/cookies.txt",
 		"cookies.txt",
 	}
@@ -343,7 +346,10 @@ func FindPlatformCookiesFile(jobDir, platform string) string {
 	if specific != "" {
 		candidates := []string{
 			filepath.Join(jobDir, specific),
+			filepath.Join(jobDir, "cookies", specific),
+			filepath.Join("/opt/video-site-91/data/cookies", specific),
 			filepath.Join("/opt/video-site-91", specific),
+			filepath.Join("data/cookies", specific),
 			filepath.Join("/etc/yt-dlp", specific),
 			specific,
 		}

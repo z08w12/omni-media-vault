@@ -12,6 +12,7 @@ import (
 	"github.com/video-site/backend/internal/backuptransfer"
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/config"
+	"github.com/video-site/backend/internal/cookiemanager"
 	"github.com/video-site/backend/internal/mediaimport"
 	"github.com/video-site/backend/internal/scanjob"
 	"github.com/video-site/backend/internal/telegram"
@@ -50,6 +51,7 @@ type AdminServer struct {
 	Auth            *auth.Authenticator
 	Backups         *backup.Manager
 	BackupTransfers *backuptransfer.Manager
+	Cookies         *cookiemanager.Manager
 	// Logs is the durable runtime log store exposed only through the
 	// administrator-authenticated routes below.
 	Logs *applog.Store
@@ -270,6 +272,14 @@ func (a *AdminServer) Register(r chi.Router) {
 			r.Put("/config.yaml", a.handlePutConfigYAML)
 			r.Get("/settings", a.handleGetSettings)
 			r.Put("/settings", a.handlePutSettings)
+
+			// 平台 Cookie 管理
+			r.Get("/cookies", a.handleListCookies)
+			r.Get("/cookies/{platform}", a.handleGetCookieContent)
+			r.Put("/cookies/{platform}", a.handleSaveCookieContent)
+			r.Post("/cookies/{platform}/upload", a.handleUploadCookieFile)
+			r.Delete("/cookies/{platform}", a.handleDeleteCookie)
+			r.Post("/cookies/{platform}/restore", a.handleRestoreCookie)
 
 			// 运维任务
 			r.Get("/update/check", a.handleCheckUpdate)
