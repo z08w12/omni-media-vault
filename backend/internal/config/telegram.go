@@ -1,10 +1,15 @@
 package config
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Telegram struct {
@@ -93,4 +98,66 @@ func (m *Manager) TelegramSettings() Telegram {
 	cfg.LocalFilesRoot = m.telegramDeployment.localRoot
 	cfg.AllowedUserIDs = append([]int64{}, cfg.AllowedUserIDs...)
 	return cfg
+}
+
+// UpdateTelegramUserClientSession safely updates the telegram user_client credentials in config.yaml
+// and applies them to the running configuration.
+func (m *Manager) UpdateTelegramUserClientSession(session, apiID, apiHash string) error {
+	if m == nil {
+		return errors.New("configuration manager is unavailable")
+	}
+	m.updateMu.Lock()
+	defer m.updateMu.Unlock()
+
+	data, err := os.ReadFile(m.path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+
+	document := ensureDocumentMapping(&root)
+	tg := ensureMappingValue(document, "telegram")
+	setBooleanValue(tg, "user_client_enabled", true)
+	if strings.TrimSpace(session) != "" {
+		setScalarValue(tg, "session_string", strings.TrimSpace(session))
+	}
+	if strings.TrimSpace(apiID) != "" {
+		setScalarValue(tg, "api_id", strings.TrimSpace(apiID))
+	}
+	if strings.TrimSpace(apiHash) != "" {
+		setScalarValue(tg, "api_hash", strings.TrimSpace(apiHash))
+	}
+
+	var out bytes.Buffer
+	encoder := yaml.NewEncoder(&out)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&root); err != nil {
+		_ = encoder.Close()
+		return fmt.Errorf("encode config: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	newData := out.Bytes()
+	parsed, err := Parse(newData)
+	if err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+
+	fileMode := configFileMode(m.path)
+	if err := writeFileAtomically(m.path, newData, fileMode); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+
+	if _, err := m.publishLocked(parsed, configVersion(newData)); err != nil {
+		if restoreErr := writeFileAtomically(m.path, data, fileMode); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("restore config after live apply failure: %w", restoreErr))
+		}
+		return fmt.Errorf("apply live configuration: %w", err)
+	}
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -160,6 +161,13 @@ func (a *AdminServer) handleTelegramUserClientSignIn(w http.ResponseWriter, r *h
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
+	}
+	if res.OK && res.Session != "" && a.ConfigManager != nil {
+		if err := a.ConfigManager.UpdateTelegramUserClientSession(res.Session, apiID, apiHash); err != nil {
+			log.Printf("[telegram] failed to auto-persist user client session: %v", err)
+		} else {
+			log.Printf("[telegram] user client session automatically persisted to config.yaml")
+		}
 	}
 	writeJSON(w, http.StatusOK, res)
 }

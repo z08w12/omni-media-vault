@@ -482,21 +482,43 @@ export function SettingsPage() {
     }
   }
 
+  function updateVisualFields(updates: Partial<SettingsDraft>) {
+    setDraft((prevDraft) => {
+      const next = { ...prevDraft, ...updates };
+      const changed = new Set<VisualField>(Object.keys(updates) as VisualField[]);
+      setWorkingYAML((prevYAML) => {
+        try {
+          if (loaded && !sourceTouched && changedVisualFields(loaded.visual, next).size === 0) {
+            return loaded.content;
+          }
+          return applyVisualFields(prevYAML, next, changed);
+        } catch (error) {
+          show(error instanceof Error ? error.message : "更新配置失败", "error");
+          return prevYAML;
+        }
+      });
+      return next;
+    });
+    setSourceError("");
+  }
+
   function updateVisualField<Field extends VisualField>(field: Field, value: SettingsDraft[Field]) {
-    const next = { ...draft, [field]: value };
+    updateVisualFields({ [field]: value } as Partial<SettingsDraft>);
+  }
+
+  async function reloadConfig() {
     try {
-      if (loaded && !sourceTouched && changedVisualFields(loaded.visual, next).size === 0) {
-        setDraft(next);
-        setWorkingYAML(loaded.content);
-        setSourceError("");
-        return;
-      }
-      const nextYAML = applyVisualFields(workingYAML, next, new Set<VisualField>([field]));
-      setDraft(next);
-      setWorkingYAML(nextYAML);
+      const next = await api.getConfigYAML();
+      const parsed = parseConfig(next.content);
+      const snapshot = { ...next, visual: parsed.draft };
+      setLoaded(snapshot);
+      setDraft(parsed.draft);
+      setWorkingYAML(next.content);
+      setSourceTouched(false);
       setSourceError("");
-    } catch (error) {
-      show(error instanceof Error ? error.message : "更新配置失败", "error");
+      setPendingSave(null);
+    } catch {
+      // ignore
     }
   }
 
@@ -803,7 +825,14 @@ export function SettingsPage() {
                   </SettingsRow>
                 </SettingsSection>
               )}
-              <TelegramSettingsSection active={telegramSelected} disabled={controlsDisabled} draft={draft} onChange={updateVisualField} />
+              <TelegramSettingsSection
+                active={telegramSelected}
+                disabled={controlsDisabled}
+                draft={draft}
+                onChange={updateVisualField}
+                onBatchChange={updateVisualFields}
+                onReload={reloadConfig}
+              />
               {activeSection === "config-cookies" && (
                 <CookiesSettingsSection active={cookiesSelected} />
               )}

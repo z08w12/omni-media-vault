@@ -12,6 +12,8 @@ type Props = {
     field: Field,
     value: SettingsDraft[Field],
   ) => void;
+  onBatchChange?: (updates: Partial<SettingsDraft>) => void;
+  onReload?: () => void;
 };
 
 export function TelegramSettingsSection({
@@ -19,6 +21,8 @@ export function TelegramSettingsSection({
   disabled,
   draft,
   onChange,
+  onBatchChange,
+  onReload,
 }: Props) {
   const [testingClient, setTestingClient] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -116,13 +120,21 @@ export function TelegramSettingsSection({
         if (data.session) setLoginSession(data.session);
         setLoginStatus({ ok: false, msg: "该账号启用了两步验证 (2FA)，请输入两步验证密码后重试" });
       } else if (data.ok) {
-        onChange("telegramSessionString", data.session);
-        onChange("telegramUserClientEnabled", true);
+        if (onBatchChange) {
+          onBatchChange({
+            telegramSessionString: data.session,
+            telegramUserClientEnabled: true,
+          });
+        } else {
+          onChange("telegramSessionString", data.session);
+          onChange("telegramUserClientEnabled", true);
+        }
+        onReload?.();
         const u = data.user;
         const userDisplay = u?.username ? `@${u.username}` : `ID: ${u?.id || ""}`;
         setLoginStatus({
           ok: true,
-          msg: `登录成功！已成功登录为 ${userDisplay} 并自动填入 Session 凭证，请点击页面右上角保存配置。`,
+          msg: `登录成功！已成功登录为 ${userDisplay}，凭证已自动持久化保存并即时生效。`,
         });
       }
     } catch (err) {
