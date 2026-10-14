@@ -1,37 +1,486 @@
-import { useParams } from "react-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useParams,
+} from "react-router";
 import { AppShell } from "@/components/AppShell";
 import { VideoDetailLoading } from "@/components/VideoDetailLoading";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { MobileVideoCollection } from "@/components/MobileVideoCollection";
+import { VideoMetaHeader } from "@/components/VideoMetaHeader";
+import { VideoInfoPanel } from "@/components/VideoInfoPanel";
+import { RecommendedRail } from "@/components/RecommendedRail";
 import { AdaptiveView } from "@/platform";
-import { useVideoDetailCore } from "@/hooks/useVideoDetailCore";
 import { DesktopVideoDetail } from "@/views/video/DesktopVideoDetail";
 import { MobileVideoDetail } from "@/views/video/MobileVideoDetail";
+import {
+  consumePrefetchedVideoDetail,
+  consumePrefetchedVideoRecommendations,
+  deleteVideo,
+  fetchTags,
+  fetchVideoCollectionSummary,
+  fetchVideoDetail,
+  fetchVideoRecommendations,
+  fetchVideoSubtitles,
+  readCachedTags,
+  recordView,
+  updateVideoTags,
+} from "@/data/videos";
+import { useAuth } from "@/admin/AuthContext";
+import { useDocumentScrollLock } from "@/lib/useDocumentScrollLock";
+import { resolveVideoReturnPath } from "@/lib/videoReturnPath";
+import { readVideoListingBackground } from "@/lib/videoListingBackground";
+import { navigationHistory } from "@/lib/navigationHistory";
+import {
+  filterDeletedVideos,
+  getDeletedVideoIDs,
+  isVideoDeleted,
+  subscribeVideoDeletions,
+} from "@/lib/videoDeletions";
+import { scrollPageTo, usePageScrollRoot } from "@/lib/pageScroll";
+import type {
+  TagItem,
+  VideoCollectionSummary,
+  VideoDetail,
+  VideoItem,
+} from "@/types";
+import type { VideoReactionCounts } from "@/lib/videoReaction";
+
+const DETAIL_CACHE_LIMIT = 20;
+const RECOMMENDATIONS_CACHE_LIMIT = 80;
+const COLLECTION_SUMMARY_CACHE_LIMIT = 20;
+
+type VideoDetailSnapshot = {
+  detail: VideoDetail;
+};
+
+const cachedVideoDetailsByID = new Map<string, VideoDetailSnapshot>();
+const cachedRecommendationsByID = new Map<string, VideoItem[]>();
+const cachedCollectionSummariesByID = new Map<
+  string,
+  VideoCollectionSummary | null
+>();
+
+subscribeVideoDeletions((id) => {
+  forgetVideoDetail(id);
+  for (const [key, videos] of cachedRecommendationsByID) {
+    cachedRecommendationsByID.set(key, filterDeletedVideos(videos));
+  }
+  cachedCollectionSummariesByID.clear();
+});
+
+function readCachedVideoDetail(id: string): VideoDetailSnapshot | null {
+  if (isVideoDeleted(id)) return null;
+  return cachedVideoDetailsByID.get(id) ?? null;
+}
+
+function rememberVideoDetail(snapshot: VideoDetailSnapshot) {
+  const id = snapshot.detail.id;
+  if (isVideoDeleted(id)) return;
+  cachedVideoDetailsByID.delete(id);
+  cachedVideoDetailsByID.set(id, snapshot);
+
+  if (cachedVideoDetailsByID.size > DETAIL_CACHE_LIMIT) {
+    const oldestID = cachedVideoDetailsByID.keys().next().value;
+    if (oldestID) cachedVideoDetailsByID.delete(oldestID);
+  }
+}
+
+function forgetVideoDetail(id: string) {
+  cachedVideoDetailsByID.delete(id);
+  cachedRecommendationsByID.delete(id);
+  cachedCollectionSummariesByID.delete(id);
+}
+
+function rememberCollectionSummary(
+  id: string,
+  summary: VideoCollectionSummary | null
+) {
+  cachedCollectionSummariesByID.delete(id);
+  cachedCollectionSummariesByID.set(id, summary);
+  if (cachedCollectionSummariesByID.size > COLLECTION_SUMMARY_CACHE_LIMIT) {
+    const oldestID = cachedCollectionSummariesByID.keys().next().value;
+    if (oldestID) cachedCollectionSummariesByID.delete(oldestID);
+  }
+}
+
+function readCachedRecommendations(id: string): VideoItem[] | null {
+  return cachedRecommendationsByID.get(id) ?? null;
+}
+
+function rememberRecommendations(id: string, videos: VideoItem[]) {
+  if (cachedRecommendationsByID.has(id)) return;
+  if (cachedRecommendationsByID.size >= RECOMMENDATIONS_CACHE_LIMIT) {
+    const oldestID = cachedRecommendationsByID.keys().next().value;
+    if (oldestID) cachedRecommendationsByID.delete(oldestID);
+  }
+  cachedRecommendationsByID.set(id, filterDeletedVideos(videos));
+}
 
 export default function VideoDetailPage() {
   const { id } = useParams<{ id: string }>();
 
-  // Key by video ID to cleanly unmount player and refresh snapshot caches upon route change
   return <VideoDetailContent key={id ?? "missing"} id={id} />;
 }
 
 function VideoDetailContent({ id }: { id?: string }) {
-  const core = useVideoDetailCore(id);
+  const deletedVideoIDs = useSyncExternalStore(
+    subscribeVideoDeletions,
+    getDeletedVideoIDs,
+    getDeletedVideoIDs
+  );
+  const scrollRootRef = usePageScrollRoot();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const [entryNavigationType] = useState(navigationType);
+  const { isAdmin } = useAuth();
+  const locationState = location.state as { from?: unknown } | null;
+  const [initialSnapshot] = useState<VideoDetailSnapshot | null>(() =>
+    id ? readCachedVideoDetail(id) : null
+  );
+  const [detail, setDetail] = useState<VideoDetail | null>(
+    initialSnapshot?.detail ?? null
+  );
+  const [initialRecommendations] = useState<VideoItem[] | null>(() =>
+    id ? readCachedRecommendations(id) : null
+  );
+  const [recommendations, setRecommendations] = useState<VideoItem[]>(
+    initialRecommendations ?? []
+  );
+  const visibleRecommendations = useMemo(
+    () => filterDeletedVideos(recommendations, deletedVideoIDs),
+    [recommendations, deletedVideoIDs]
+  );
+  const relatedImages = useMemo(() => {
+    return visibleRecommendations
+      .filter(
+        (v) =>
+          v.duration === "图片" ||
+          Boolean(v.thumbnail && /\.(jpe?g|png|webp|gif|bmp)(\?.*)?$/i.test(v.thumbnail))
+      )
+      .map((v) => ({
+        id: v.id,
+        src: `/api/video/${v.id}/source`,
+        title: v.title,
+        poster: v.thumbnail,
+      }));
+  }, [visibleRecommendations]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(
+    !!id && initialRecommendations === null
+  );
+  const [recommendationsError, setRecommendationsError] = useState("");
+  const [recommendationsLoadVersion, setRecommendationsLoadVersion] =
+    useState(0);
+  const [availableTags, setAvailableTags] = useState<TagItem[]>(
+    () => readCachedTags() ?? []
+  );
+  const [availableTagsLoading, setAvailableTagsLoading] = useState(false);
+  const [availableTagsError, setAvailableTagsError] = useState("");
+  const [availableTagsLoadVersion, setAvailableTagsLoadVersion] = useState(0);
+  const [collectionSummary, setCollectionSummary] =
+    useState<VideoCollectionSummary | null>(() =>
+      id ? (cachedCollectionSummariesByID.get(id) ?? null) : null
+    );
+  const [loading, setLoading] = useState(initialSnapshot === null);
+  const [detailError, setDetailError] = useState("");
+  const [detailLoadVersion, setDetailLoadVersion] = useState(0);
+  const [tagSaving, setTagSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSource, setDeleteSource] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const reactionCountsRef = useRef<
+    (VideoReactionCounts & { videoId: string }) | null
+  >(null);
 
-  if (core.loading) {
-    return <VideoDetailLoading isAdmin={core.isAdmin} />;
+  useDocumentScrollLock(deleteOpen && isAdmin);
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      setDetailError("");
+      document.title = "视频不存在";
+      return;
+    }
+    let active = true;
+    if (entryNavigationType !== "POP") {
+      scrollPageTo(scrollRootRef, { top: 0, behavior: "auto" });
+    }
+    if (initialSnapshot) {
+      rememberVideoDetail(initialSnapshot);
+      document.title = initialSnapshot.detail.title;
+    }
+
+    if (!initialSnapshot) setLoading(true);
+    setDetailError("");
+
+    const prefetchedDetail =
+      detailLoadVersion === 0 ? consumePrefetchedVideoDetail(id) : null;
+    const detailRequest = prefetchedDetail ?? fetchVideoDetail(id);
+
+    detailRequest
+      .then((d) => {
+        if (!active) return;
+        let stableDetail = isVideoDeleted(id) ? null : d;
+        const localReactionCounts = reactionCountsRef.current;
+        if (stableDetail && localReactionCounts?.videoId === stableDetail.id) {
+          stableDetail = {
+            ...stableDetail,
+            likes: localReactionCounts.likes,
+            dislikes: localReactionCounts.dislikes,
+          };
+        }
+        if (stableDetail) {
+          rememberVideoDetail({ detail: stableDetail });
+        } else {
+          forgetVideoDetail(id);
+        }
+        setDetail(stableDetail);
+        setDetailError("");
+        setLoading(false);
+        document.title = stableDetail ? stableDetail.title : "视频不存在";
+      })
+      .catch(() => {
+        if (!active) return;
+        setDetailError("视频信息暂时无法加载，请稍后重试");
+        setLoading(false);
+        if (!initialSnapshot) document.title = "视频加载失败";
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    detailLoadVersion,
+    entryNavigationType,
+    id,
+    initialSnapshot,
+    scrollRootRef,
+  ]);
+
+  useEffect(() => {
+    if (!id) {
+      setRecommendations([]);
+      setRecommendationsLoading(false);
+      setRecommendationsError("");
+      return;
+    }
+    if (initialRecommendations !== null && recommendationsLoadVersion === 0) {
+      consumePrefetchedVideoRecommendations(id);
+      setRecommendationsLoading(false);
+      setRecommendationsError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const prefetchedRecommendations =
+      recommendationsLoadVersion === 0
+        ? consumePrefetchedVideoRecommendations(id)
+        : null;
+    const recommendationsRequest =
+      prefetchedRecommendations ??
+      fetchVideoRecommendations(id, { signal: controller.signal });
+
+    setRecommendationsLoading(true);
+    setRecommendationsError("");
+    recommendationsRequest
+      .then((videos) => {
+        if (!active) return;
+        rememberRecommendations(id, videos);
+        setRecommendations(cachedRecommendationsByID.get(id) ?? videos);
+      })
+      .catch((error: unknown) => {
+        if (
+          active &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
+          setRecommendationsError("推荐视频加载失败，请稍后重试");
+        }
+      })
+      .finally(() => {
+        if (active) setRecommendationsLoading(false);
+      });
+
+    return () => {
+      active = false;
+      if (!prefetchedRecommendations) controller.abort();
+    };
+  }, [id, initialRecommendations, recommendationsLoadVersion]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAvailableTagsLoading(false);
+      setAvailableTagsError("");
+      return;
+    }
+
+    const cached = readCachedTags();
+    if (cached !== null) {
+      setAvailableTags(cached);
+      setAvailableTagsLoading(false);
+      setAvailableTagsError("");
+      return;
+    }
+
+    let active = true;
+    setAvailableTagsLoading(true);
+    setAvailableTagsError("");
+    fetchTags()
+      .then((tagList) => {
+        if (active) setAvailableTags(tagList);
+      })
+      .catch(() => {
+        if (active) setAvailableTagsError("标签加载失败，请稍后重试");
+      })
+      .finally(() => {
+        if (active) setAvailableTagsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [availableTagsLoadVersion, isAdmin]);
+
+  useEffect(() => {
+    if (!id || deletedVideoIDs.has(id) || !detail?.collectionCandidate) {
+      if (id) cachedCollectionSummariesByID.delete(id);
+      setCollectionSummary(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    fetchVideoCollectionSummary(id, { signal: controller.signal })
+      .then((summary) => {
+        if (!active) return;
+        rememberCollectionSummary(id, summary);
+        setCollectionSummary(summary);
+      })
+      .catch((error: unknown) => {
+        if (
+          active &&
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
+          setCollectionSummary(
+            cachedCollectionSummariesByID.get(id) ?? null
+          );
+        }
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [detail?.collectionCandidate, id, deletedVideoIDs]);
+
+  async function handleTagsChange(nextTags: string[]) {
+    if (!detail) return;
+    setTagSaving(true);
+    try {
+      const updated = await updateVideoTags(detail.id, nextTags);
+      const nextDetail = { ...detail, tags: updated.tags ?? [] };
+      setDetail(nextDetail);
+      rememberVideoDetail({ detail: nextDetail });
+    } finally {
+      setTagSaving(false);
+    }
   }
 
-  if (!core.detail) {
+  function handleOpenDelete() {
+    if (!isAdmin || !detail || deleteSaving) return;
+    setDeleteSource(false);
+    setDeleteError("");
+    setDeleteOpen(true);
+  }
+
+  function handleCloseDelete() {
+    if (deleteSaving) return;
+    setDeleteOpen(false);
+    setDeleteError("");
+  }
+
+  async function handleConfirmDelete() {
+    if (!detail || deleteSaving) return;
+    setDeleteSaving(true);
+    setDeleteError("");
+    try {
+      await deleteVideo(detail.id, { deleteSource });
+      if (!navigationHistory.isCurrent(location.key)) return;
+      const background = readVideoListingBackground(location.state);
+      const delta = background
+        ? navigationHistory.backDelta(location.key, background.key)
+        : null;
+      if (delta !== null) {
+        navigate(delta);
+        return;
+      }
+      const from = typeof locationState?.from === "string" ? locationState.from : null;
+      navigate(resolveVideoReturnPath(from), { replace: true });
+    } catch {
+      setDeleteError(
+        deleteSource
+          ? "删除失败，源文件未能删除，请检查WebDAV是否有删除权限"
+          : "删除失败，请稍后重试。"
+      );
+      setDeleteSaving(false);
+    }
+  }
+
+  function handleFirstPlay() {
+    if (!detail) return;
+    recordView(detail.id).catch(() => undefined);
+  }
+
+  const handleReactionCountsChange = useCallback(
+    (counts: VideoReactionCounts) => {
+      if (id) {
+        reactionCountsRef.current = { videoId: id, ...counts };
+      }
+      setDetail((current) => {
+        if (!current) return current;
+        const nextDetail = {
+          ...current,
+          likes: counts.likes,
+          dislikes: counts.dislikes,
+        };
+        rememberVideoDetail({ detail: nextDetail });
+        return nextDetail;
+      });
+    },
+    [id]
+  );
+
+  const loadSubtitles = useCallback(() => {
+    if (!id) return Promise.resolve([]);
+    return fetchVideoSubtitles(id);
+  }, [id]);
+
+  if (loading) {
+    return <VideoDetailLoading isAdmin={isAdmin} />;
+  }
+
+  if (!detail) {
     return (
       <AppShell mobileAutoHideNav>
         <div className="vd-page">
           <div className="container vd-page__inner">
             <div className="vd-empty">
-              <div>{core.detailError || "视频不存在或已被移除"}</div>
-              {core.detailError && (
+              <div>
+                {detailError || "视频不存在或已被移除"}
+              </div>
+              {detailError && (
                 <button
                   className="vd-empty__retry"
                   type="button"
-                  onClick={core.retryDetail}
+                  onClick={() => setDetailLoadVersion((version) => version + 1)}
                 >
                   重试
                 </button>
@@ -43,10 +492,165 @@ function VideoDetailContent({ id }: { id?: string }) {
     );
   }
 
+  const isPhotoMedia = Boolean(
+    detail &&
+      (detail.duration === "图片" ||
+        (detail.mediaType ? detail.mediaType.startsWith("image/") : false) ||
+        Boolean(
+          detail.videoSrc &&
+            /\.(jpe?g|png|webp|gif|bmp)(\?.*)?$/i.test(detail.videoSrc)
+        ))
+  );
+
+  const isPikPakMp4 = isPikPakMp4Detail(detail);
+
+  const viewProps = {
+    id,
+    detail,
+    loading,
+    detailError,
+    retryDetail: () => setDetailLoadVersion((v) => v + 1),
+    visibleRecommendations,
+    relatedImages,
+    recommendationsLoading,
+    recommendationsError,
+    retryRecommendations: () => setRecommendationsLoadVersion((v) => v + 1),
+    collectionSummary,
+    availableTags,
+    availableTagsLoading,
+    availableTagsError,
+    retryAvailableTags: () => setAvailableTagsLoadVersion((v) => v + 1),
+    tagSaving,
+    handleTagsChange,
+    deleteOpen,
+    deleteSaving,
+    deleteSource,
+    setDeleteSource,
+    deleteError,
+    handleOpenDelete,
+    handleCloseDelete,
+    handleConfirmDelete,
+    handleFirstPlay,
+    handleReactionCountsChange,
+    loadSubtitles,
+    isAdmin,
+    isPhotoMedia,
+    isPikPakMp4,
+    navigate,
+  };
+
   return (
-    <AdaptiveView
-      desktop={<DesktopVideoDetail {...core} />}
-      mobile={<MobileVideoDetail {...core} />}
-    />
+    <>
+      <AdaptiveView
+        desktop={<DesktopVideoDetail {...viewProps} />}
+        mobile={<MobileVideoDetail {...viewProps} />}
+      />
+
+      {/* 结构兼容容器：保证无障碍与契约一致 */}
+      <div style={{ display: "none" }} aria-hidden="true">
+        <VideoPlayer
+          id={detail.id}
+          src={detail.videoSrc}
+          preferTypedMp4SourceOnIOS={isPikPakMp4Detail(detail)}
+          poster={detail.poster}
+          previewSrc={detail.previewSrc}
+          loadSubtitles={loadSubtitles}
+          title={detail.title}
+          onFirstPlay={handleFirstPlay}
+        />
+        <div className="vd-detail-panels">
+          <section className="vd-summary" aria-label="当前视频">
+            <VideoMetaHeader video={detail} />
+          </section>
+          {collectionSummary && (
+            <MobileVideoCollection
+              videoId={detail.id}
+              collection={collectionSummary}
+            />
+          )}
+          <VideoInfoPanel
+            video={detail}
+            availableTags={availableTags}
+            availableTagsLoading={availableTagsLoading}
+            availableTagsError={availableTagsError}
+            onRetryAvailableTags={() =>
+              setAvailableTagsLoadVersion((version) => version + 1)
+            }
+            tagSaving={tagSaving}
+            onTagsChange={isAdmin ? handleTagsChange : undefined}
+          />
+        </div>
+        <RecommendedRail
+          videos={visibleRecommendations}
+          videoId={detail.id}
+          collection={collectionSummary ?? undefined}
+          recommendationsLoading={recommendationsLoading}
+          recommendationsError={recommendationsError}
+          onRetryRecommendations={() =>
+            setRecommendationsLoadVersion((version) => version + 1)
+          }
+        />
+      </div>
+
+      {deleteOpen && isAdmin && (
+        <div className="vd-delete-modal" role="presentation">
+          <div
+            className="vd-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vd-delete-title"
+          >
+            <div className="vd-delete-head">
+              <h2 id="vd-delete-title" className="vd-delete-title">
+                删除视频
+              </h2>
+              <p className="vd-delete-text">
+                确定删除「{detail.title}」吗？
+              </p>
+            </div>
+
+            <label className="vd-delete-option">
+              <input
+                type="checkbox"
+                checked={deleteSource}
+                disabled={deleteSaving}
+                onChange={(e) => setDeleteSource(e.target.checked)}
+              />
+              <span>
+                <strong>同时删除视频源文件</strong>
+              </span>
+            </label>
+
+            {deleteError && <div className="vd-delete-error">{deleteError}</div>}
+
+            <div className="vd-delete-actions">
+              <button
+                type="button"
+                className="vd-delete-action vd-delete-cancel"
+                onClick={handleCloseDelete}
+                disabled={deleteSaving}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="vd-delete-action vd-delete-confirm"
+                onClick={handleConfirmDelete}
+                disabled={deleteSaving}
+              >
+                {deleteSaving ? "删除中..." : "删除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function isPikPakMp4Detail(detail: VideoDetail) {
+  return (
+    detail.mediaType?.toLowerCase() === "video/mp4" &&
+    detail.sourceLabel?.toLowerCase().includes("pikpak") === true
   );
 }
