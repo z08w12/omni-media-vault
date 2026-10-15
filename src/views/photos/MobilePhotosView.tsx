@@ -4,6 +4,7 @@ import { SearchPanel } from "@/components/SearchPanel";
 import { TagCloud } from "@/components/TagCloud";
 import { InfiniteFeedStatus } from "@/components/InfiniteFeedStatus";
 import { PhotoLightbox, type PhotoSlide } from "@/components/PhotoLightbox";
+import { toPhotoSlides } from "@/lib/photoSlides";
 import { TagAlbumCard } from "./components/TagAlbumCard";
 import { PhotosViewSwitcher } from "./components/PhotosViewSwitcher";
 import { MasonryGrid } from "./components/MasonryGrid";
@@ -64,19 +65,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
   onCloseLightbox,
   onLightboxIndexChange,
 }: Props) {
-  const allPhotoSlides: PhotoSlide[] = useMemo(() => {
-    return items.map((p) => {
-      const fullSourceUrl = `/api/video/${p.id}/source`;
-      const thumbUrl = p.thumbnail || p.previewSrc || fullSourceUrl;
-      return {
-        src: fullSourceUrl,
-        thumbnail: thumbUrl,
-        title: p.title,
-        downloadUrl: fullSourceUrl,
-        id: p.id,
-      };
-    });
-  }, [items]);
+  const allPhotoSlides: PhotoSlide[] = useMemo(() => toPhotoSlides(items), [items]);
 
   const handleOpenAlbum = (album: TagAlbum) => {
     onSelectTag(album.tag);

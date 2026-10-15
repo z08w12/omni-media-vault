@@ -260,6 +260,32 @@ export function useVideoDetailCore(id?: string) {
   ]);
 
   useEffect(() => {
+    if (!id || !detail) return;
+    if (
+      detail.transcodeStatus !== "pending" &&
+      detail.transcodeStatus !== "processing"
+    )
+      return;
+
+    const timer = window.setInterval(() => {
+      fetchVideoDetail(id)
+        .then((latest) => {
+          if (latest) {
+            rememberVideoDetail({ detail: latest });
+            setDetail(latest);
+          }
+        })
+        .catch(() => {
+          // ignore transient poll error
+        });
+    }, 3000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [id, detail?.transcodeStatus]);
+
+  useEffect(() => {
     if (!id) {
       setRecommendations([]);
       setRecommendationsLoading(false);
@@ -480,11 +506,7 @@ export function useVideoDetailCore(id?: string) {
         ))
   );
 
-  const isPikPakMp4 = Boolean(
-    detail &&
-      detail.mediaType?.toLowerCase() === "video/mp4" &&
-      detail.sourceLabel?.toLowerCase().includes("pikpak") === true
-  );
+  const isPikPakMp4 = isPikPakMp4Detail(detail);
 
   return {
     id,
@@ -520,4 +542,12 @@ export function useVideoDetailCore(id?: string) {
     isPikPakMp4,
     navigate,
   };
+}
+
+function isPikPakMp4Detail(detail: VideoDetail | null) {
+  return Boolean(
+    detail &&
+      detail.mediaType?.toLowerCase() === "video/mp4" &&
+      detail.sourceLabel?.toLowerCase().includes("pikpak") === true
+  );
 }

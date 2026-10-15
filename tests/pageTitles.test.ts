@@ -12,7 +12,9 @@ import { getAdminRouteCacheKey } from "../src/admin/AdminRouteCache.tsx";
 const pages = {
   home: readFileSync(new URL("../src/pages/HomePage.tsx", import.meta.url), "utf8"),
   listing: readFileSync(new URL("../src/pages/ListingPage.tsx", import.meta.url), "utf8"),
-  detail: readFileSync(new URL("../src/pages/VideoDetailPage.tsx", import.meta.url), "utf8"),
+  detail:
+    readFileSync(new URL("../src/pages/VideoDetailPage.tsx", import.meta.url), "utf8") +
+    readFileSync(new URL("../src/hooks/useVideoDetailCore.ts", import.meta.url), "utf8"),
   upload: readFileSync(new URL("../src/pages/UploadPage.tsx", import.meta.url), "utf8"),
   shorts: readFileSync(new URL("../src/pages/ShortsPage.tsx", import.meta.url), "utf8"),
 };

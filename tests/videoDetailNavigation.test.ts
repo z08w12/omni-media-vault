@@ -42,14 +42,12 @@ const gridSource = readFileSync(
   new URL("../src/components/VideoGrid.tsx", import.meta.url),
   "utf8"
 );
-const cardSource = readFileSync(
-  new URL("../src/components/VideoCard.tsx", import.meta.url),
-  "utf8"
-);
-const detailPageSource = readFileSync(
-  new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
-  "utf8"
-);
+const cardSource =
+  readFileSync(new URL("../src/components/VideoCard.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("../src/lib/previewIntent.ts", import.meta.url), "utf8");
+const detailPageSource =
+  readFileSync(new URL("../src/pages/VideoDetailPage.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("../src/hooks/useVideoDetailCore.ts", import.meta.url), "utf8");
 
 test("video detail route preloads once and always has a visible route fallback", () => {
   assert.match(routeSource, /let routeModulePromise:/);

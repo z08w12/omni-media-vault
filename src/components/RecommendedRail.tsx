@@ -21,7 +21,7 @@ import { previewController } from "@/lib/previewController";
 import {
   shouldInterceptPreviewTap,
   shouldStartInstantPreview,
-  TOUCH_PREVIEW_DELAY_MS,
+  usePreviewIntent,
 } from "@/lib/previewIntent";
 import { useInViewport } from "@/lib/useInViewport";
 import { useIsActivePreview, usePreviewEnabled } from "@/lib/useIsActivePreview";
@@ -44,8 +44,6 @@ type Props = {
   recommendationsError?: string;
   onRetryRecommendations?: () => void;
 };
-
-const HOVER_DELAY_MS = 300;
 const HOVER_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
 const COLLECTION_POSITION_MAX_FRAMES = 8;
 const COLLECTION_POSITION_STABLE_FRAMES = 2;
@@ -407,8 +405,6 @@ function RecommendedItemContent(
   );
 
   const rootRef = useRef<HTMLLIElement | null>(null);
-  const previewIntentTimerRef = useRef<number | null>(null);
-  const touchPreviewArmedRef = useRef(false);
   const lastPointerTypeRef = useRef<string>("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -419,6 +415,21 @@ function RecommendedItemContent(
     if (!previewEnabled) cleanup();
   }, [previewEnabled, video.id]);
   const inView = useInViewport(rootRef);
+
+  const isImage = video.duration === "图片";
+  const {
+    touchPreviewArmedRef,
+    clearPreviewIntentTimer,
+    startPreviewIntent,
+    startTouchPreviewIntent,
+  } = usePreviewIntent({
+    videoId: video.id,
+    previewSrc: video.previewSrc,
+    inView,
+    isImage,
+    setPreviewState,
+    onActivatePreview: () => setShouldRenderPreview(true),
+  });
   const setRootRef = useCallback(
     (node: HTMLLIElement | null) => {
       rootRef.current = node;
@@ -488,50 +499,7 @@ function RecommendedItemContent(
     }
   }
 
-  function startPreviewIntent() {
-    if (!previewController.isEnabled() || !video.previewSrc) return;
-    if (!inView) return;
-    if (previewIntentTimerRef.current) return;
-    setPreviewState("intent");
-    previewIntentTimerRef.current = window.setTimeout(() => {
-      previewIntentTimerRef.current = null;
-      startPreviewNow({ requireInView: true });
-    }, HOVER_DELAY_MS);
-  }
 
-  function startTouchPreviewIntent() {
-    if (!previewController.isEnabled() || !video.previewSrc) return;
-    clearPreviewIntentTimer();
-    touchPreviewArmedRef.current = true;
-    previewController.setActiveId(video.id);
-    setPreviewState("intent");
-    previewIntentTimerRef.current = window.setTimeout(() => {
-      previewIntentTimerRef.current = null;
-      if (
-        !previewController.isEnabled() ||
-        !touchPreviewArmedRef.current ||
-        previewController.getActiveId() !== video.id
-      ) {
-        return;
-      }
-      startPreviewNow({ requireInView: false });
-    }, TOUCH_PREVIEW_DELAY_MS);
-  }
-
-  function clearPreviewIntentTimer() {
-    if (previewIntentTimerRef.current === null) return;
-    window.clearTimeout(previewIntentTimerRef.current);
-    previewIntentTimerRef.current = null;
-  }
-
-  function startPreviewNow(options: { requireInView: boolean }) {
-    if (!previewController.isEnabled() || !video.previewSrc) return;
-    if (options.requireInView && !inView) return;
-    clearPreviewIntentTimer();
-    previewController.setActiveId(video.id);
-    setShouldRenderPreview(true);
-    setPreviewState("loading");
-  }
 
   function stopPreview() {
     cleanup();

@@ -14,6 +14,7 @@ import { useTagAlbums } from "@/hooks/useTagAlbums";
 import { DesktopPhotosView } from "@/views/photos/DesktopPhotosView";
 import { MobilePhotosView } from "@/views/photos/MobilePhotosView";
 import type { PhotoSlide } from "@/components/PhotoLightbox";
+import { toPhotoSlide } from "@/lib/photoSlides";
 
 const DESKTOP_PAGE_SIZE = 24;
 
@@ -140,15 +141,7 @@ export default function PhotosPage() {
       const newSlides: PhotoSlide[] = [];
       for (const p of items) {
         if (!existingIds.has(p.id)) {
-          const fullSourceUrl = `/api/video/${p.id}/source`;
-          const thumbUrl = p.thumbnail || p.previewSrc || fullSourceUrl;
-          newSlides.push({
-            src: fullSourceUrl,
-            thumbnail: thumbUrl,
-            title: p.title,
-            downloadUrl: fullSourceUrl,
-            id: p.id,
-          });
+          newSlides.push(toPhotoSlide(p));
           existingIds.add(p.id);
         }
       }

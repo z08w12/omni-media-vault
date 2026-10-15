@@ -314,13 +314,10 @@ func (c *Catalog) replaceManualVideoTags(ctx context.Context, videoID string, la
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE videos SET tags_manual = 1 WHERE id = ?`, videoID); err != nil {
+	if err := syncVideoTagsJSONTx(ctx, tx, videoID, true); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return c.syncVideoTagsJSON(ctx, videoID, true)
+	return tx.Commit()
 }
 
 // ReplaceAutoVideoTags 用给定分配覆盖视频的引擎标签（source IN auto/legacy），
@@ -466,44 +463,92 @@ func (c *Catalog) AddVideoTagAssignments(ctx context.Context, videoID string, as
 	if len(assignments) == 0 {
 		return 0, nil
 	}
-	if c.hasManualTags(ctx, videoID) {
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var manual int
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(tags_manual, 0) FROM videos WHERE id = ?`, videoID).Scan(&manual)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, sql.ErrNoRows
+		}
+		return 0, err
+	}
+	if manual == 1 {
 		return 0, nil
 	}
+
 	changedCount := 0
 	labelAdded := false
+	now := time.Now().UnixMilli()
 	for _, a := range assignments {
 		label := cleanTagLabel(a.Label)
 		if label == "" {
 			continue
 		}
-		tag, err := c.getTagByLabel(ctx, label)
+		tag, err := c.getTagByLabelTx(ctx, tx, label)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
-			return changedCount, err
+			return 0, err
 		}
 		source := normalizeVideoTagSource(a.Source)
-		changed, labelWasAdded, err := c.upsertVideoTagAssignment(ctx, videoID, tag.ID, source, a.Evidence)
-		if err != nil {
-			return changedCount, err
-		}
-		if changed {
+		var existingSource, existingEvidence string
+		err = tx.QueryRowContext(ctx,
+			`SELECT COALESCE(source, ''), COALESCE(evidence, '') FROM video_tags WHERE video_id = ? AND tag_id = ?`,
+			videoID, tag.ID).Scan(&existingSource, &existingEvidence)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, err := tx.ExecContext(ctx,
+				`INSERT OR IGNORE INTO video_tags (video_id, tag_id, source, evidence, created_at) VALUES (?, ?, ?, ?, ?)`,
+				videoID, tag.ID, source, a.Evidence, now)
+			if err != nil {
+				return 0, err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				changedCount++
+				labelAdded = true
+			}
+		} else if err != nil {
+			return 0, err
+		} else {
+			if !shouldReplaceVideoTagAssignment(existingSource, source) {
+				continue
+			}
+			evidence := a.Evidence
+			if evidence == "" {
+				evidence = existingEvidence
+			}
+			if normalizeVideoTagSource(existingSource) == source && existingEvidence == evidence {
+				continue
+			}
+			_, err = tx.ExecContext(ctx,
+				`UPDATE video_tags SET source = ?, evidence = ? WHERE video_id = ? AND tag_id = ?`,
+				source, evidence, videoID, tag.ID)
+			if err != nil {
+				return 0, err
+			}
 			changedCount++
-		}
-		if labelWasAdded {
-			labelAdded = true
 		}
 	}
 	if labelAdded {
-		if err := c.syncVideoTagsJSON(ctx, videoID, false); err != nil {
-			return changedCount, err
+		if err := syncVideoTagsJSONTx(ctx, tx, videoID, false); err != nil {
+			return 0, err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
 	}
 	return changedCount, nil
 }
 
 func (c *Catalog) upsertVideoTagAssignment(ctx context.Context, videoID string, tagID int64, source, evidence string) (bool, bool, error) {
+	if !c.videoExists(ctx, videoID) {
+		return false, false, sql.ErrNoRows
+	}
 	source = normalizeVideoTagSource(source)
 	var existingSource, existingEvidence string
 	err := c.db.QueryRowContext(ctx,

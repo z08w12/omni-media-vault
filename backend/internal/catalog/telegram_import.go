@@ -81,17 +81,47 @@ func (c *Catalog) migrateTelegramLocalFilesUnique(ctx context.Context) error {
 	if !strings.Contains(sqlStr, "UNIQUE") {
 		return nil
 	}
-	_, err = c.db.ExecContext(ctx, `
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var origCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM telegram_local_files`).Scan(&origCount); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
 		CREATE TABLE telegram_local_files_new (
 			file_id TEXT PRIMARY KEY,
 			job_id TEXT NOT NULL
-		);
-		INSERT OR IGNORE INTO telegram_local_files_new SELECT file_id, job_id FROM telegram_local_files;
-		DROP TABLE telegram_local_files;
-		ALTER TABLE telegram_local_files_new RENAME TO telegram_local_files;
-		CREATE INDEX IF NOT EXISTS idx_telegram_local_files_job ON telegram_local_files(job_id);
-	`)
-	return err
+		)`); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO telegram_local_files_new SELECT file_id, job_id FROM telegram_local_files`); err != nil {
+		return err
+	}
+
+	var newCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM telegram_local_files_new`).Scan(&newCount); err != nil {
+		return err
+	}
+	if origCount > 0 && newCount == 0 {
+		return fmt.Errorf("migration of telegram_local_files lost all rows (%d -> 0)", origCount)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DROP TABLE telegram_local_files`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE telegram_local_files_new RENAME TO telegram_local_files`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_telegram_local_files_job ON telegram_local_files(job_id)`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type TelegramSource struct {

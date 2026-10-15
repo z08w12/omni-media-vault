@@ -26,14 +26,8 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
   retryAvailableTags,
   tagSaving,
   handleTagsChange,
-  deleteOpen,
   deleteSaving,
-  deleteSource,
-  setDeleteSource,
-  deleteError,
   handleOpenDelete,
-  handleCloseDelete,
-  handleConfirmDelete,
   handleFirstPlay,
   handleReactionCountsChange,
   loadSubtitles,
@@ -189,60 +183,6 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
           )}
         </div>
       </div>
-
-      {/* Admin Delete Confirmation Modal */}
-      {deleteOpen && isAdmin && (
-        <div className="vd-delete-modal" role="presentation">
-          <div
-            className="vd-delete-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="vd-delete-title"
-          >
-            <div className="vd-delete-head">
-              <h2 id="vd-delete-title" className="vd-delete-title">
-                删除视频
-              </h2>
-              <p className="vd-delete-text">
-                确定删除「{detail.title}」吗？
-              </p>
-            </div>
-
-            <label className="vd-delete-option">
-              <input
-                type="checkbox"
-                checked={deleteSource}
-                disabled={deleteSaving}
-                onChange={(e) => setDeleteSource(e.target.checked)}
-              />
-              <span>
-                <strong>同时删除视频源文件</strong>
-              </span>
-            </label>
-
-            {deleteError && <div className="vd-delete-error">{deleteError}</div>}
-
-            <div className="vd-delete-actions">
-              <button
-                type="button"
-                className="vd-delete-action vd-delete-cancel"
-                onClick={handleCloseDelete}
-                disabled={deleteSaving}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="vd-delete-action vd-delete-confirm"
-                onClick={handleConfirmDelete}
-                disabled={deleteSaving}
-              >
-                {deleteSaving ? "删除中..." : "删除"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   );
 });

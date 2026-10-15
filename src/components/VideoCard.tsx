@@ -9,7 +9,7 @@ import { previewController } from "@/lib/previewController";
 import {
   shouldInterceptPreviewTap,
   shouldStartInstantPreview,
-  TOUCH_PREVIEW_DELAY_MS,
+  usePreviewIntent,
 } from "@/lib/previewIntent";
 import { useInViewport } from "@/lib/useInViewport";
 import { useIsActivePreview, usePreviewEnabled } from "@/lib/useIsActivePreview";
@@ -25,8 +25,6 @@ type Props = {
   eager?: boolean;
   highPriority?: boolean;
 };
-
-const HOVER_DELAY_MS = 300;
 
 export const VideoCard = memo(function VideoCard({
   video,
@@ -44,8 +42,6 @@ export const VideoCard = memo(function VideoCard({
     : undefined;
 
   const rootRef = useRef<HTMLElement | null>(null);
-  const previewIntentTimerRef = useRef<number | null>(null);
-  const touchPreviewArmedRef = useRef(false);
   const lastPointerTypeRef = useRef<string>("");
   const canHoverRef = useRef(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -57,6 +53,21 @@ export const VideoCard = memo(function VideoCard({
     if (!previewEnabled) cleanup();
   }, [previewEnabled, video.id]);
   const inView = useInViewport(rootRef);
+
+  const isImage = video.duration === "图片";
+  const {
+    touchPreviewArmedRef,
+    clearPreviewIntentTimer,
+    startPreviewIntent,
+    startTouchPreviewIntent,
+  } = usePreviewIntent({
+    videoId: video.id,
+    previewSrc: video.previewSrc,
+    inView,
+    isImage,
+    setPreviewState,
+    onActivatePreview: () => setShouldRenderPreview(true),
+  });
 
   // 当全局活跃卡片不是自己时，立刻停止预览
   useEffect(() => {
@@ -117,54 +128,6 @@ export const VideoCard = memo(function VideoCard({
     if (previewController.getActiveId() === video.id) {
       previewController.setActiveId(null);
     }
-  }
-
-  function startPreviewIntent() {
-    if (!previewController.isEnabled() || !video.previewSrc) return;
-    if (!inView) return;
-    if (previewIntentTimerRef.current) return;
-    setPreviewState("intent");
-
-    previewIntentTimerRef.current = window.setTimeout(() => {
-      previewIntentTimerRef.current = null;
-      startPreviewNow({ requireInView: true });
-    }, HOVER_DELAY_MS);
-  }
-
-  function startTouchPreviewIntent() {
-    if (!previewController.isEnabled() || !video.previewSrc) return;
-    clearPreviewIntentTimer();
-    touchPreviewArmedRef.current = true;
-    previewController.setActiveId(video.id);
-    setPreviewState("intent");
-    previewIntentTimerRef.current = window.setTimeout(() => {
-      previewIntentTimerRef.current = null;
-      if (
-        !previewController.isEnabled() ||
-        !touchPreviewArmedRef.current ||
-        previewController.getActiveId() !== video.id
-      ) {
-        return;
-      }
-      startPreviewNow({ requireInView: false });
-    }, TOUCH_PREVIEW_DELAY_MS);
-  }
-
-  const isImage = video.duration === "图片";
-
-  function clearPreviewIntentTimer() {
-    if (previewIntentTimerRef.current === null) return;
-    window.clearTimeout(previewIntentTimerRef.current);
-    previewIntentTimerRef.current = null;
-  }
-
-  function startPreviewNow(options: { requireInView: boolean }) {
-    if (isImage || !previewController.isEnabled() || !video.previewSrc) return;
-    if (options.requireInView && !inView) return;
-    clearPreviewIntentTimer();
-    previewController.setActiveId(video.id);
-    setShouldRenderPreview(true);
-    setPreviewState("loading");
   }
 
   function stopPreview() {

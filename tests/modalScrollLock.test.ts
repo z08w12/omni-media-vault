@@ -14,10 +14,9 @@ const videoInfoSource = readFileSync(
   new URL("../src/components/VideoInfoPanel.tsx", import.meta.url),
   "utf8"
 );
-const videoDetailSource = readFileSync(
-  new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
-  "utf8"
-);
+const videoDetailSource =
+  readFileSync(new URL("../src/pages/VideoDetailPage.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("../src/hooks/useVideoDetailCore.ts", import.meta.url), "utf8");
 
 test("modal surfaces share a reference-counted document scroll lock", () => {
   assert.match(adminModalSource, /const visible = open && routeActive/);

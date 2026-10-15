@@ -34,13 +34,15 @@ func isSystemTag(label string) bool {
 
 func (c *Catalog) ListPhotoAlbums(ctx context.Context) ([]PhotoAlbum, error) {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT v.id, COALESCE(t.label, '')
-		FROM videos v
-		LEFT JOIN video_tags vt ON vt.video_id = v.id
+		SELECT videos.id, COALESCE(t.label, '')
+		FROM videos
+		LEFT JOIN video_tags vt ON vt.video_id = videos.id
 		LEFT JOIN tags t ON t.id = vt.tag_id
-		WHERE COALESCE(v.hidden, 0) = 0
-		  AND LOWER(TRIM(COALESCE(v.ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
-		ORDER BY v.published_at DESC, v.id ASC
+		WHERE COALESCE(videos.hidden, 0) = 0
+		  AND `+activeDriveWhereSQL+`
+		  AND `+uniqueVideoWhereSQL+`
+		  AND LOWER(TRIM(COALESCE(videos.ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
+		ORDER BY videos.published_at DESC, videos.id ASC
 	`)
 	if err != nil {
 		return nil, err

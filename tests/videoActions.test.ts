@@ -10,10 +10,9 @@ const detailCss = readFileSync(
   new URL("../src/styles/video-detail.css", import.meta.url),
   "utf8"
 );
-const detailPageSource = readFileSync(
-  new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
-  "utf8"
-);
+const detailPageSource =
+  readFileSync(new URL("../src/pages/VideoDetailPage.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("../src/hooks/useVideoDetailCore.ts", import.meta.url), "utf8");
 const infoPanelSource = readFileSync(
   new URL("../src/components/VideoInfoPanel.tsx", import.meta.url),
   "utf8"
