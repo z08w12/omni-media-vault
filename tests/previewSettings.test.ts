@@ -279,11 +279,13 @@ test("a timed-out request disables previews and polling retries", async (t) => {
 
 test("every card surface gates media, delayed intent, overlays and touch interception", () => {
   for (const file of ["VideoCard", "RecommendedRail", "MobileVideoCollection"]) {
-    const source = readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8");
+    const source =
+      readFileSync(new URL(`../src/components/${file}.tsx`, import.meta.url), "utf8") +
+      readFileSync(new URL("../src/lib/previewIntent.ts", import.meta.url), "utf8");
     assert.match(source, /const previewEnabled = usePreviewEnabled\(\)/);
     assert.match(source, /data-preview-enabled=\{previewEnabled\}/);
     assert.match(source, /if \(!previewEnabled\) cleanup(?:Preview)?\(\)/);
-    assert.match(source, /!previewController\.isEnabled\(\) \|\| !video\.previewSrc/);
+    assert.match(source, /!previewController\.isEnabled\(\) \|\| !(?:video\.)?previewSrc/);
     assert.match(source, /previewEnabled: previewController\.isEnabled\(\) && Boolean\(video\.previewSrc\)/);
     assert.match(source, /previewEnabled && shouldRenderPreview &&/);
     assert.doesNotMatch(source, /\{previewState === "(?:loading|playing|error)"/);

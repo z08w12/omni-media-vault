@@ -21,18 +21,28 @@ const componentSource = readFileSync(
   new URL("../src/components/MobileVideoCollection.tsx", import.meta.url),
   "utf8"
 );
-const detailSource = readFileSync(
-  new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
-  "utf8"
-);
+const detailSource =
+  readFileSync(
+    new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
+    "utf8"
+  ) +
+  readFileSync(
+    new URL("../src/hooks/useVideoDetailCore.ts", import.meta.url),
+    "utf8"
+  );
 const desktopDetailSource = readFileSync(
   new URL("../src/views/video/DesktopVideoDetail.tsx", import.meta.url),
   "utf8"
 );
-const railSource = readFileSync(
-  new URL("../src/components/RecommendedRail.tsx", import.meta.url),
-  "utf8"
-);
+const railSource =
+  readFileSync(
+    new URL("../src/components/RecommendedRail.tsx", import.meta.url),
+    "utf8"
+  ) +
+  readFileSync(
+    new URL("../src/lib/previewIntent.ts", import.meta.url),
+    "utf8"
+  );
 const railSkeletonSource = readFileSync(
   new URL("../src/components/VideoRailSkeleton.tsx", import.meta.url),
   "utf8"
@@ -176,7 +186,7 @@ test("recommendation loading and failures stay inside the independent rail", () 
   );
   assert.match(
     detailSource,
-    /retryRecommendations:\s*\(\) =>\s*setRecommendationsLoadVersion\(/
+    /(?:retryRecommendations:\s*\(\) =>|const retryRecommendations\s*=\s*useCallback\(\(\) =>\s*\{?)\s*setRecommendationsLoadVersion\(/
   );
   assert.match(
     desktopDetailSource,
@@ -248,7 +258,7 @@ test("desktop and mobile collections request previews and share preview behavior
   );
   assert.match(
     railSource,
-    /previewController\.setActiveId\(video\.id\)/
+    /previewController\.setActiveId\((?:video\.id|videoId)\)/
   );
   assert.match(
     componentSource,

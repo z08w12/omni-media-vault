@@ -393,9 +393,10 @@ test("current video bulk actions use ordinary text buttons", () => {
   );
   const base = ruleBody(adminCss, ".admin-videos-bulk-actions__btn");
 
-  assert.equal(Array.from(currentVideosSource.matchAll(/className="admin-btn admin-videos-bulk-actions__btn"/g)).length, 3);
+  assert.equal(Array.from(currentVideosSource.matchAll(/className="admin-btn admin-videos-bulk-actions__btn"/g)).length, 4);
   assert.match(currentVideosSource, /onClick=\{selectPageVideos\}[\s\S]*?disabled=\{listItems\.length === 0 \|\| allPageSelected\}[\s\S]*?>\s*全选本页\s*<\/button>/);
   assert.match(currentVideosSource, /onClick=\{\(\) => setSelectedIds\(new Set\(\)\)\}[\s\S]*?disabled=\{selectedIds\.size === 0\}[\s\S]*?>\s*取消选中\s*<\/button>/);
+  assert.match(currentVideosSource, />\s*批量打标签\s*<\/button>/);
   assert.doesNotMatch(currentVideosSource, />\s*重生预览\s*<\/button>/);
   assert.doesNotMatch(currentVideosSource, /handleBatchRegen|batchRegenOpen|batchRegening|confirmBatchRegen/);
   assert.match(currentVideosSource, />\s*批量删除\s*<\/button>/);
