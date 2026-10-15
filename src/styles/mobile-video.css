@@ -21,12 +21,26 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
 }
 
+.mobile-player-container--photo {
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
 .mobile-player-wrap {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;
   overflow: hidden;
+}
+
+.mobile-photo-wrap {
+  position: relative;
+  width: 100%;
+  background: #000;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Touch Gesture HUD */

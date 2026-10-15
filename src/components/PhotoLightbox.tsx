@@ -15,6 +15,7 @@ import "@/styles/lightbox.css";
 
 export type PhotoSlide = {
   src: string;
+  thumbnail?: string;
   title?: string;
   description?: string;
   downloadUrl?: string;
@@ -28,6 +29,8 @@ export type PhotoLightboxProps = {
   onClose: () => void;
   onIndexChange?: (index: number) => void;
   showThumbnails?: boolean;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 };
 
 export const PhotoLightbox = memo(function PhotoLightbox({
@@ -37,6 +40,8 @@ export const PhotoLightbox = memo(function PhotoLightbox({
   onClose,
   onIndexChange,
   showThumbnails = true,
+  hasMore = false,
+  loadingMore: _loadingMore,
 }: PhotoLightboxProps) {
   const handleView = useCallback(
     ({ index: currentIndex }: { index: number }) => {
@@ -52,6 +57,7 @@ export const PhotoLightbox = memo(function PhotoLightbox({
 
     return {
       src: slide.src,
+      thumbnail: slide.thumbnail || slide.src,
       title: slide.title,
       description: slide.description,
       download,
@@ -76,7 +82,7 @@ export const PhotoLightbox = memo(function PhotoLightbox({
       on={{ view: handleView }}
       plugins={plugins}
       carousel={{
-        finite: slides.length <= 1,
+        finite: slides.length <= 1 || Boolean(hasMore),
         preload: 2,
         padding: "16px",
         spacing: "30%",

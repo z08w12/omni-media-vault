@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+
+if (typeof (globalThis as any).Response === "undefined") {
+  (globalThis as any).Response = class Response {
+    body: any;
+    status: number;
+    headers: any;
+    ok: boolean;
+    constructor(body?: any, init?: any) {
+      this.body = body;
+      this.status = init?.status ?? 200;
+      this.ok = this.status >= 200 && this.status < 300;
+      this.headers = new Map(Object.entries(init?.headers ?? {}));
+    }
+    async json() {
+      return JSON.parse(this.body);
+    }
+    async text() {
+      return String(this.body ?? "");
+    }
+  };
+}
 import {
   consumePrefetchedVideoDetail,
   consumePrefetchedVideoRecommendations,

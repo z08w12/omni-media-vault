@@ -29,6 +29,7 @@ export function useTagAlbums(_items?: VideoItem[]) {
 
   const [albums, setAlbums] = useState<TagAlbum[]>([]);
   const [loadingAlbums, setLoadingAlbums] = useState(false);
+  const [albumsError, setAlbumsError] = useState<string | null>(null);
 
   const setDisplayMode = (mode: PhotosDisplayMode) => {
     setDisplayModeState(mode);
@@ -41,6 +42,7 @@ export function useTagAlbums(_items?: VideoItem[]) {
 
   const loadServerAlbums = useCallback(async () => {
     setLoadingAlbums(true);
+    setAlbumsError(null);
     try {
       const list = await fetchPhotoAlbums();
       const mapped: TagAlbum[] = list.map((a) => {
@@ -75,6 +77,7 @@ export function useTagAlbums(_items?: VideoItem[]) {
       setAlbums(mapped);
     } catch (err) {
       console.warn("Failed to fetch photo albums from server:", err);
+      setAlbumsError(err instanceof Error ? err.message : "获取相册失败，请稍后重试");
     } finally {
       setLoadingAlbums(false);
     }
@@ -87,6 +90,7 @@ export function useTagAlbums(_items?: VideoItem[]) {
   return {
     albums,
     loadingAlbums,
+    albumsError,
     reloadAlbums: loadServerAlbums,
     displayMode,
     setDisplayMode,

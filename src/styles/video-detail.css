@@ -2791,6 +2791,27 @@
     height: 34px;
     padding: 0 14px;
   }
+
+  .image-viewer-container {
+    min-height: clamp(320px, 50vh, 520px);
+    border-radius: 0;
+  }
+
+  .image-viewer-stage {
+    min-height: clamp(260px, 45vh, 440px);
+  }
+
+  .image-viewer-toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .image-viewer-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
 }
 
 /* ---------- 手机 ---------- */

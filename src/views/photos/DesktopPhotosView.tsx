@@ -20,6 +20,14 @@ type Props = {
   setDisplayMode: (mode: PhotosDisplayMode) => void;
   hasMore: boolean;
   loadingMore: boolean;
+  initialLoading?: boolean;
+  failed?: boolean;
+  error?: string | null;
+  onReload?: () => void;
+  onRetry?: () => void;
+  loadingAlbums?: boolean;
+  albumsError?: string | null;
+  onReloadAlbums?: () => void;
   onSetSentinel: (el: HTMLDivElement | null) => void;
   keyword: string;
   tag: string;
@@ -39,6 +47,14 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
   setDisplayMode,
   hasMore,
   loadingMore,
+  initialLoading,
+  failed,
+  error,
+  onReload,
+  onRetry,
+  loadingAlbums,
+  albumsError,
+  onReloadAlbums,
   onSetSentinel,
   tag,
   onSelectTag,
@@ -52,12 +68,13 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
   // Convert items into slides for Lightbox
   const allPhotoSlides: PhotoSlide[] = useMemo(() => {
     return items.map((p) => {
-      const src = p.thumbnail || p.previewSrc || `/api/video/${p.id}/source`;
-      const downloadUrl = `/api/video/${p.id}/source`;
+      const fullSourceUrl = `/api/video/${p.id}/source`;
+      const thumbUrl = p.thumbnail || p.previewSrc || fullSourceUrl;
       return {
-        src,
+        src: fullSourceUrl,
+        thumbnail: thumbUrl,
         title: p.title,
-        downloadUrl,
+        downloadUrl: fullSourceUrl,
         id: p.id,
       };
     });
@@ -138,7 +155,30 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
           )}
 
           <main id="main-content" className="photos-main" tabIndex={-1}>
-            {items.length === 0 ? (
+            {initialLoading ? (
+              <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "80px 0" }}>
+                <span className="preview-loader" style={{ margin: "0 auto 16px auto" }} />
+                <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "14px" }}>
+                  正在加载照片图集...
+                </p>
+              </div>
+            ) : failed && items.length === 0 ? (
+              <div className="photos-error-state" style={{ textAlign: "center", padding: "60px 0" }}>
+                <p style={{ color: "#f87171", fontSize: "15px", marginBottom: "16px" }}>
+                  {error || "照片图集加载失败，请检查网络连接"}
+                </p>
+                {onReload && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--primary"
+                    onClick={onReload}
+                    style={{ padding: "8px 20px" }}
+                  >
+                    重新加载
+                  </button>
+                )}
+              </div>
+            ) : items.length === 0 ? (
               <div className="photos-empty" style={{ textAlign: "center", padding: "60px 0" }}>
                 <p style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: "15px" }}>
                   暂无匹配的照片图集
@@ -146,16 +186,41 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
               </div>
             ) : displayMode === "albums" && !tag ? (
               /* Tag Albums Grid */
-              <div className="tag-albums-grid">
-                {albums.map((album) => (
-                  <TagAlbumCard
-                    key={album.tag}
-                    album={album}
-                    onOpenAlbum={handleOpenAlbum}
-                    onSelectTag={onSelectTag}
-                  />
-                ))}
-              </div>
+              loadingAlbums && albums.length === 0 ? (
+                <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "80px 0" }}>
+                  <span className="preview-loader" style={{ margin: "0 auto 16px auto" }} />
+                  <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "14px" }}>
+                    正在加载相册列表...
+                  </p>
+                </div>
+              ) : albumsError && albums.length === 0 ? (
+                <div className="photos-error-state" style={{ textAlign: "center", padding: "60px 0" }}>
+                  <p style={{ color: "#f87171", fontSize: "15px", marginBottom: "16px" }}>
+                    {albumsError}
+                  </p>
+                  {onReloadAlbums && (
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--primary"
+                      onClick={onReloadAlbums}
+                      style={{ padding: "8px 20px" }}
+                    >
+                      重试相册
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="tag-albums-grid">
+                  {albums.map((album) => (
+                    <TagAlbumCard
+                      key={album.tag}
+                      album={album}
+                      onOpenAlbum={handleOpenAlbum}
+                      onSelectTag={onSelectTag}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
               /* Staggered Masonry Waterfall Grid */
               <MasonryGrid
@@ -173,6 +238,26 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
             />
 
             {loadingMore && <InfiniteFeedStatus state="loading" />}
+            {failed && items.length > 0 && (
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={onRetry}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    color: "#fff",
+                    padding: "6px 16px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                  }}
+                >
+                  下一页加载失败，点击重试
+                </button>
+              </div>
+            )}
             {!hasMore && items.length > 0 && <InfiniteFeedStatus state="end" />}
           </main>
         </div>
@@ -185,6 +270,8 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
         onClose={onCloseLightbox}
         onIndexChange={onLightboxIndexChange}
         showThumbnails={slides.length > 1}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
       />
     </AppShell>
   );

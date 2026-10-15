@@ -19,6 +19,14 @@ type Props = {
   setDisplayMode: (mode: PhotosDisplayMode) => void;
   hasMore: boolean;
   loadingMore: boolean;
+  initialLoading?: boolean;
+  failed?: boolean;
+  error?: string | null;
+  onReload?: () => void;
+  onRetry?: () => void;
+  loadingAlbums?: boolean;
+  albumsError?: string | null;
+  onReloadAlbums?: () => void;
   onSetSentinel: (el: HTMLDivElement | null) => void;
   keyword: string;
   tag: string;
@@ -38,6 +46,14 @@ export const MobilePhotosView = memo(function MobilePhotosView({
   setDisplayMode,
   hasMore,
   loadingMore,
+  initialLoading,
+  failed,
+  error,
+  onReload,
+  onRetry,
+  loadingAlbums,
+  albumsError,
+  onReloadAlbums,
   onSetSentinel,
   tag,
   onSelectTag,
@@ -50,12 +66,13 @@ export const MobilePhotosView = memo(function MobilePhotosView({
 }: Props) {
   const allPhotoSlides: PhotoSlide[] = useMemo(() => {
     return items.map((p) => {
-      const src = p.thumbnail || p.previewSrc || `/api/video/${p.id}/source`;
-      const downloadUrl = `/api/video/${p.id}/source`;
+      const fullSourceUrl = `/api/video/${p.id}/source`;
+      const thumbUrl = p.thumbnail || p.previewSrc || fullSourceUrl;
       return {
-        src,
+        src: fullSourceUrl,
+        thumbnail: thumbUrl,
         title: p.title,
-        downloadUrl,
+        downloadUrl: fullSourceUrl,
         id: p.id,
       };
     });
@@ -129,21 +146,69 @@ export const MobilePhotosView = memo(function MobilePhotosView({
           )}
 
           <main id="main-content" className="photos-main" tabIndex={-1}>
-            {items.length === 0 ? (
+            {initialLoading ? (
+              <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "60px 0" }}>
+                <span className="preview-loader" style={{ margin: "0 auto 12px auto" }} />
+                <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "13px" }}>
+                  正在加载照片图集...
+                </p>
+              </div>
+            ) : failed && items.length === 0 ? (
+              <div className="photos-error-state" style={{ textAlign: "center", padding: "40px 0" }}>
+                <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>
+                  {error || "照片图集加载失败，请检查网络"}
+                </p>
+                {onReload && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--primary"
+                    onClick={onReload}
+                    style={{ padding: "6px 16px", fontSize: "13px" }}
+                  >
+                    重新加载
+                  </button>
+                )}
+              </div>
+            ) : items.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(255, 255, 255, 0.45)" }}>
                 暂无匹配的照片
               </div>
             ) : displayMode === "albums" && !tag ? (
-              <div className="tag-albums-grid">
-                {albums.map((album) => (
-                  <TagAlbumCard
-                    key={album.tag}
-                    album={album}
-                    onOpenAlbum={handleOpenAlbum}
-                    onSelectTag={onSelectTag}
-                  />
-                ))}
-              </div>
+              loadingAlbums && albums.length === 0 ? (
+                <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "60px 0" }}>
+                  <span className="preview-loader" style={{ margin: "0 auto 12px auto" }} />
+                  <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "13px" }}>
+                    正在加载相册列表...
+                  </p>
+                </div>
+              ) : albumsError && albums.length === 0 ? (
+                <div className="photos-error-state" style={{ textAlign: "center", padding: "40px 0" }}>
+                  <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>
+                    {albumsError}
+                  </p>
+                  {onReloadAlbums && (
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--primary"
+                      onClick={onReloadAlbums}
+                      style={{ padding: "6px 16px", fontSize: "13px" }}
+                    >
+                      重试相册
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="tag-albums-grid">
+                  {albums.map((album) => (
+                    <TagAlbumCard
+                      key={album.tag}
+                      album={album}
+                      onOpenAlbum={handleOpenAlbum}
+                      onSelectTag={onSelectTag}
+                    />
+                  ))}
+                </div>
+              )
             ) : (
               <MasonryGrid
                 items={items}
@@ -160,6 +225,26 @@ export const MobilePhotosView = memo(function MobilePhotosView({
             />
 
             {loadingMore && <InfiniteFeedStatus state="loading" />}
+            {failed && items.length > 0 && (
+              <div style={{ textAlign: "center", padding: "12px 0" }}>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={onRetry}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    color: "#fff",
+                    padding: "5px 14px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  下一页加载失败，点击重试
+                </button>
+              </div>
+            )}
             {!hasMore && items.length > 0 && <InfiniteFeedStatus state="end" />}
           </main>
         </div>
@@ -172,6 +257,8 @@ export const MobilePhotosView = memo(function MobilePhotosView({
         onClose={onCloseLightbox}
         onIndexChange={onLightboxIndexChange}
         showThumbnails={false}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
       />
     </AppShell>
   );

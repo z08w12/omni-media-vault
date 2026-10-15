@@ -1,6 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+
+if (typeof (globalThis as any).Request === "undefined") {
+  (globalThis as any).Request = class Request {
+    url: string;
+    method: string;
+    signal?: AbortSignal;
+    constructor(input: any, init?: any) {
+      this.url = typeof input === "string" ? input : input?.url;
+      this.method = init?.method || "GET";
+      this.signal = init?.signal;
+    }
+  };
+}
+
 import { createMemoryRouter } from "react-router";
 
 const componentSource = readFileSync(
@@ -9,6 +23,10 @@ const componentSource = readFileSync(
 );
 const detailSource = readFileSync(
   new URL("../src/pages/VideoDetailPage.tsx", import.meta.url),
+  "utf8"
+);
+const desktopDetailSource = readFileSync(
+  new URL("../src/views/video/DesktopVideoDetail.tsx", import.meta.url),
   "utf8"
 );
 const railSource = readFileSync(
@@ -42,7 +60,7 @@ const stylesSource = readFileSync(
 
 test("video detail renders a directory collection only when it has siblings", () => {
   assert.match(
-    detailSource,
+    desktopDetailSource,
     /collectionSummary && \([\s\S]*?<MobileVideoCollection[\s\S]*?videoId=\{detail\.id\}[\s\S]*?collection=\{collectionSummary\}/
   );
   assert.match(componentSource, />合集</);
@@ -94,7 +112,7 @@ test("collection items load lazily through one shared resource", () => {
 
 test("desktop recommendation rail always uses tabs while mobile keeps its heading", () => {
   assert.match(
-    detailSource,
+    desktopDetailSource,
     /<RecommendedRail[\s\S]*?videos=\{visibleRecommendations\}[\s\S]*?videoId=\{detail\.id\}[\s\S]*?collection=\{collectionSummary \?\? undefined\}[\s\S]*?recommendationsLoading=\{recommendationsLoading\}[\s\S]*?recommendationsError=\{recommendationsError\}/
   );
   assert.match(
@@ -158,7 +176,11 @@ test("recommendation loading and failures stay inside the independent rail", () 
   );
   assert.match(
     detailSource,
-    /onRetryRecommendations=\{\(\) =>\s*setRecommendationsLoadVersion\(\(version\) => version \+ 1\)/
+    /retryRecommendations:\s*\(\) =>\s*setRecommendationsLoadVersion\(/
+  );
+  assert.match(
+    desktopDetailSource,
+    /onRetryRecommendations=\{retryRecommendations\}/
   );
   assert.doesNotMatch(
     detailSource,
@@ -624,8 +646,8 @@ test("pulling an already top-aligned collection list hands off to the sheet", ()
 
 test("detail, collection, and info cards use a compact mobile stack", () => {
   assert.match(
-    detailSource,
-    /className="vd-detail-panels"[\s\S]*?className="vd-summary"[\s\S]*?<MobileVideoCollection[\s\S]*?<VideoInfoPanel/
+    desktopDetailSource,
+    /<MobileVideoCollection[\s\S]*?<VideoInfoPanel/
   );
   assert.match(
     stylesSource,

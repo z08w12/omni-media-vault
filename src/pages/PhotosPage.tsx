@@ -59,11 +59,23 @@ export default function PhotosPage() {
   const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
   const hasMore = listing.hasMore;
   const loadingMore = listing.loadingMore;
+  const initialLoading = listing.initialLoading;
+  const failed = listing.failed;
+  const error = listing.error ? (listing.error.message || "加载失败") : null;
+  const reload = listing.reload;
+  const retry = listing.retry;
   const loadMore = listing.loadMore;
   const items = listing.items;
 
   // Tag album aggregation
-  const { albums, displayMode, setDisplayMode } = useTagAlbums(items);
+  const {
+    albums,
+    loadingAlbums,
+    albumsError,
+    reloadAlbums,
+    displayMode,
+    setDisplayMode,
+  } = useTagAlbums(items);
 
   // 1. IntersectionObserver bottom trigger
   useEffect(() => {
@@ -120,13 +132,54 @@ export default function PhotosPage() {
     []
   );
 
+  // 当处于大图全屏状态且底层加载了新图片时，平滑动态追加到全屏幻灯片列表
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    setCurrentSlides((prev) => {
+      const existingIds = new Set(prev.map((s) => s.id));
+      const newSlides: PhotoSlide[] = [];
+      for (const p of items) {
+        if (!existingIds.has(p.id)) {
+          const fullSourceUrl = `/api/video/${p.id}/source`;
+          const thumbUrl = p.thumbnail || p.previewSrc || fullSourceUrl;
+          newSlides.push({
+            src: fullSourceUrl,
+            thumbnail: thumbUrl,
+            title: p.title,
+            downloadUrl: fullSourceUrl,
+            id: p.id,
+          });
+          existingIds.add(p.id);
+        }
+      }
+      return newSlides.length > 0 ? [...prev, ...newSlides] : prev;
+    });
+  }, [items, lightboxOpen]);
+
+  // 全屏浏览滑动到接近末尾时（剩余 <= 3 张），预加载下一批图片
+  const handleLightboxIndexChange = useCallback(
+    (index: number) => {
+      setLightboxIndex(index);
+      if (hasMore && !loadingMore && index >= currentSlides.length - 3) {
+        loadMore();
+      }
+    },
+    [hasMore, loadingMore, currentSlides.length, loadMore]
+  );
+
   const handleCloseLightbox = useCallback(() => {
     setLightboxOpen(false);
-  }, []);
-
-  const handleLightboxIndexChange = useCallback((index: number) => {
-    setLightboxIndex(index);
-  }, []);
+    // 退出大图查看器时平滑联动定位到最后浏览的图片
+    const lastViewedSlide = currentSlides[lightboxIndex];
+    if (lastViewedSlide?.id) {
+      const cardEl = document.querySelector(
+        `[data-photo-id="${lastViewedSlide.id}"]`
+      );
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [currentSlides, lightboxIndex]);
 
   const viewProps = {
     items,
@@ -135,6 +188,14 @@ export default function PhotosPage() {
     setDisplayMode,
     hasMore,
     loadingMore,
+    initialLoading,
+    failed,
+    error,
+    onReload: reload,
+    onRetry: retry,
+    loadingAlbums,
+    albumsError,
+    onReloadAlbums: reloadAlbums,
     onSetSentinel: setSentinelEl,
     keyword,
     tag,

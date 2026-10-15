@@ -441,6 +441,18 @@ function sourcePathname(src: string) {
   return src;
 }
 
+type PlaybackStateSession = {
+  currentTime: number;
+  playbackRate: number;
+  volume: number;
+  muted: boolean;
+  paused: boolean;
+  updatedAt: number;
+};
+
+const playbackSessionCache = new Map<string, PlaybackStateSession>();
+const SESSION_RESTORE_WINDOW_MS = 60 * 1000;
+
 function mountArtPlayer({
   id,
   mount,
@@ -472,6 +484,14 @@ function mountArtPlayer({
   onPreviewHover: (hover: PreviewHover | null) => void;
   onGestureHud: (label: string, duration?: number) => void;
 }) {
+  const cachedSession = id ? playbackSessionCache.get(id) : undefined;
+  const shouldRestoreSession = Boolean(
+    cachedSession &&
+      Date.now() - cachedSession.updatedAt < SESSION_RESTORE_WINDOW_MS &&
+      cachedSession.currentTime > 0.5
+  );
+  let sessionRestored = false;
+
   const useTypedMp4Source =
     preferTypedMp4SourceOnIOS && isIOSPlaybackDevice();
   const sourceType = useTypedMp4Source
@@ -698,12 +718,46 @@ function mountArtPlayer({
     ? bindOrientationToggle(art)
     : noop;
 
+  function recordCurrentPlaybackState() {
+    if (!id || !Number.isFinite(video.currentTime)) return;
+    playbackSessionCache.set(id, {
+      currentTime: video.currentTime,
+      playbackRate: video.playbackRate || DEFAULT_SETTINGS.playbackRate,
+      volume: video.volume,
+      muted: video.muted,
+      paused: video.paused,
+      updatedAt: Date.now(),
+    });
+  }
+
+  function tryRestoreSession() {
+    if (!shouldRestoreSession || sessionRestored || disposed || !cachedSession) return;
+    sessionRestored = true;
+    try {
+      if (Number.isFinite(cachedSession.currentTime) && cachedSession.currentTime > 0) {
+        video.currentTime = cachedSession.currentTime;
+      }
+      if (Number.isFinite(cachedSession.playbackRate) && cachedSession.playbackRate > 0) {
+        video.playbackRate = cachedSession.playbackRate;
+      }
+      if (!cachedSession.paused) {
+        void art.play().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   mount.addEventListener("contextmenu", preventContextMenu);
 
   art.on("video:loadstart", handleLoadStart);
+  art.on("video:loadedmetadata", tryRestoreSession);
   art.on("video:loadeddata", handleReady);
   art.on("video:canplay", handleReady);
+  art.on("video:canplay", tryRestoreSession);
   art.on("video:playing", handleReady);
+  art.on("video:timeupdate", recordCurrentPlaybackState);
+  art.on("video:ratechange", recordCurrentPlaybackState);
   art.on("video:error", handleVideoError);
   art.on("error", handleVideoError);
   art.on("video:play", handlePlay);
@@ -722,6 +776,7 @@ function mountArtPlayer({
 
   return () => {
     disposed = true;
+    recordCurrentPlaybackState();
     clearPlaybackDiagnostic();
     // ArtPlayer 的网页全屏会把播放器节点临时移动到 document.body。
     // 路由回退时必须先退出网页全屏，把节点移回 mount，再执行 destroy；
@@ -741,9 +796,13 @@ function mountArtPlayer({
     destroyHls(video);
     if (useTypedMp4Source) clearTypedMp4Source(video);
     art.off("video:loadstart", handleLoadStart);
+    art.off("video:loadedmetadata", tryRestoreSession);
     art.off("video:loadeddata", handleReady);
     art.off("video:canplay", handleReady);
+    art.off("video:canplay", tryRestoreSession);
     art.off("video:playing", handleReady);
+    art.off("video:timeupdate", recordCurrentPlaybackState);
+    art.off("video:ratechange", recordCurrentPlaybackState);
     art.off("video:error", handleVideoError);
     art.off("error", handleVideoError);
     art.off("video:play", handlePlay);

@@ -28,6 +28,7 @@ export const MasonryGrid = memo(function MasonryGrid({
         return (
           <div
             key={item.id}
+            data-photo-id={item.id}
             className="masonry-item"
             onClick={() => onOpenPhoto(item, index)}
           >

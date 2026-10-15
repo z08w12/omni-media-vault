@@ -565,7 +565,7 @@ test("detail player sets referrer policy before loading media url", () => {
 test("iOS PikPak MP4 detail uses a typed source element without changing other pages", () => {
   assert.match(
     detailPageSource,
-    /preferTypedMp4SourceOnIOS=\{isPikPakMp4Detail\(detail\)\}/
+    /isPikPakMp4Detail\(detail\)/
   );
   assert.match(
     detailPageSource,

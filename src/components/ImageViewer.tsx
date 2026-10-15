@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Maximize2 } from "lucide-react";
 import { PhotoLightbox, type PhotoSlide } from "./PhotoLightbox";
 
@@ -18,6 +18,10 @@ type Props = {
   onSelectImage?: (item: ImageItemInfo) => void;
 };
 
+type ViewerSlide = PhotoSlide & {
+  originalItem?: ImageItemInfo;
+};
+
 export const ImageViewer = memo(function ImageViewer({
   src,
   poster,
@@ -34,8 +38,8 @@ export const ImageViewer = memo(function ImageViewer({
   const displaySrc = src || poster || "";
 
   // 构建画廊幻灯片列表：当前图片优先放在第一个，其余相关图片去重跟随
-  const slides: PhotoSlide[] = useMemo(() => {
-    const list: PhotoSlide[] = [];
+  const slides: ViewerSlide[] = useMemo(() => {
+    const list: ViewerSlide[] = [];
     const seen = new Set<string>();
 
     if (displaySrc) {
@@ -43,6 +47,11 @@ export const ImageViewer = memo(function ImageViewer({
         src: displaySrc,
         title: title || "图片",
         downloadUrl: displaySrc,
+        originalItem: {
+          src: displaySrc,
+          title: title || "图片",
+          poster,
+        },
       });
       seen.add(displaySrc);
     }
@@ -56,13 +65,23 @@ export const ImageViewer = memo(function ImageViewer({
           title: img.title || "图片",
           downloadUrl: s,
           id: img.id,
+          originalItem: img,
         });
       }
     }
     return list;
-  }, [displaySrc, title, relatedImages]);
+  }, [displaySrc, title, poster, relatedImages]);
 
-  function handleOpenLightbox(index = 0) {
+  const currentSlide = slides[activeSlideIndex] ?? slides[0];
+  const currentDisplaySrc = currentSlide?.src || displaySrc;
+  const currentTitle = currentSlide?.title || title || "图片";
+
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+  }, [currentDisplaySrc]);
+
+  function handleOpenLightbox(index = activeSlideIndex) {
     setActiveSlideIndex(index);
     setLightboxOpen(true);
     if (onView) onView();
@@ -73,8 +92,9 @@ export const ImageViewer = memo(function ImageViewer({
     if (slides.length <= 1) return;
     const nextIdx = (activeSlideIndex - 1 + slides.length) % slides.length;
     setActiveSlideIndex(nextIdx);
-    if (onSelectImage && relatedImages[nextIdx - 1]) {
-      onSelectImage(relatedImages[nextIdx - 1]);
+    const targetItem = slides[nextIdx]?.originalItem;
+    if (onSelectImage && targetItem) {
+      onSelectImage(targetItem);
     }
   }
 
@@ -83,8 +103,9 @@ export const ImageViewer = memo(function ImageViewer({
     if (slides.length <= 1) return;
     const nextIdx = (activeSlideIndex + 1) % slides.length;
     setActiveSlideIndex(nextIdx);
-    if (onSelectImage && relatedImages[nextIdx - 1]) {
-      onSelectImage(relatedImages[nextIdx - 1]);
+    const targetItem = slides[nextIdx]?.originalItem;
+    if (onSelectImage && targetItem) {
+      onSelectImage(targetItem);
     }
   }
 
@@ -103,8 +124,8 @@ export const ImageViewer = memo(function ImageViewer({
           </div>
         ) : (
           <img
-            src={displaySrc}
-            alt={title}
+            src={currentDisplaySrc}
+            alt={currentTitle}
             className={`image-viewer-img ${loaded ? "is-loaded" : ""}`}
             onLoad={() => {
               setLoaded(true);
@@ -114,7 +135,7 @@ export const ImageViewer = memo(function ImageViewer({
               setError(true);
               setLoaded(true);
             }}
-            onClick={() => handleOpenLightbox(0)}
+            onClick={() => handleOpenLightbox(activeSlideIndex)}
             title="点击进入全屏查看器（支持手势缩放与左右切换）"
           />
         )}
@@ -154,7 +175,7 @@ export const ImageViewer = memo(function ImageViewer({
         <button
           type="button"
           className="image-viewer-btn"
-          onClick={() => handleOpenLightbox(0)}
+          onClick={() => handleOpenLightbox(activeSlideIndex)}
           title="全屏多功能查看（支持放大缩小、手势缩放与左右翻页）"
         >
           <Maximize2 size={16} />
@@ -162,8 +183,8 @@ export const ImageViewer = memo(function ImageViewer({
         </button>
 
         <a
-          href={displaySrc}
-          download={title}
+          href={currentDisplaySrc}
+          download={currentTitle}
           target="_blank"
           rel="noopener noreferrer"
           className="image-viewer-btn"
@@ -174,7 +195,7 @@ export const ImageViewer = memo(function ImageViewer({
         </a>
 
         <a
-          href={displaySrc}
+          href={currentDisplaySrc}
           target="_blank"
           rel="noopener noreferrer"
           className="image-viewer-btn"

@@ -14,11 +14,6 @@ import {
 } from "react-router";
 import { AppShell } from "@/components/AppShell";
 import { VideoDetailLoading } from "@/components/VideoDetailLoading";
-import { VideoPlayer } from "@/components/VideoPlayer";
-import { MobileVideoCollection } from "@/components/MobileVideoCollection";
-import { VideoMetaHeader } from "@/components/VideoMetaHeader";
-import { VideoInfoPanel } from "@/components/VideoInfoPanel";
-import { RecommendedRail } from "@/components/RecommendedRail";
 import { AdaptiveView } from "@/platform";
 import { DesktopVideoDetail } from "@/views/video/DesktopVideoDetail";
 import { MobileVideoDetail } from "@/views/video/MobileVideoDetail";
@@ -567,54 +562,6 @@ function VideoDetailContent({ id }: { id?: string }) {
         desktop={<DesktopVideoDetail {...viewProps} />}
         mobile={<MobileVideoDetail {...viewProps} />}
       />
-
-      {/* 结构兼容容器：保证无障碍与契约一致 */}
-      <div style={{ display: "none" }} aria-hidden="true">
-        <VideoPlayer
-          id={detail.id}
-          src={detail.videoSrc}
-          preferTypedMp4SourceOnIOS={isPikPakMp4Detail(detail)}
-          poster={detail.poster}
-          previewSrc={detail.previewSrc}
-          loadSubtitles={loadSubtitles}
-          title={detail.title}
-          onFirstPlay={handleFirstPlay}
-          transcodeStatus={detail.transcodeStatus}
-          transcodeError={detail.transcodeError}
-        />
-        <div className="vd-detail-panels">
-          <section className="vd-summary" aria-label="当前视频">
-            <VideoMetaHeader video={detail} />
-          </section>
-          {collectionSummary && (
-            <MobileVideoCollection
-              videoId={detail.id}
-              collection={collectionSummary}
-            />
-          )}
-          <VideoInfoPanel
-            video={detail}
-            availableTags={availableTags}
-            availableTagsLoading={availableTagsLoading}
-            availableTagsError={availableTagsError}
-            onRetryAvailableTags={() =>
-              setAvailableTagsLoadVersion((version) => version + 1)
-            }
-            tagSaving={tagSaving}
-            onTagsChange={isAdmin ? handleTagsChange : undefined}
-          />
-        </div>
-        <RecommendedRail
-          videos={visibleRecommendations}
-          videoId={detail.id}
-          collection={collectionSummary ?? undefined}
-          recommendationsLoading={recommendationsLoading}
-          recommendationsError={recommendationsError}
-          onRetryRecommendations={() =>
-            setRecommendationsLoadVersion((version) => version + 1)
-          }
-        />
-      </div>
 
       {deleteOpen && isAdmin && (
         <div className="vd-delete-modal" role="presentation">

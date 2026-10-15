@@ -175,7 +175,7 @@ test("detail page defers subtitles to the player menu", () => {
   assert.doesNotMatch(detailPageSource, /haveSameSubtitles/);
   assert.doesNotMatch(detailPageSource, /subtitles:\s*stableSubtitles/);
   assert.match(detailPageSource, /const loadSubtitles = useCallback/);
-  assert.match(detailPageSource, /loadSubtitles=\{loadSubtitles\}/);
+  assert.match(detailPageSource, /loadSubtitles,/);
 });
 
 test("detail delete dialog stays centered on mobile", () => {

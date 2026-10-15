@@ -49,10 +49,16 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
   return (
     <AppShell mobileAutoHideNav={false}>
       <div className="mobile-video-page">
-        {/* Sticky Player Section */}
-        <div className="mobile-player-container mobile-player-container--stuck">
-          <div className="mobile-player-wrap">
-            {isPhotoMedia ? (
+        {/* Media Player / Photo Section */}
+        <div
+          className={`mobile-player-container ${
+            isPhotoMedia
+              ? "mobile-player-container--photo"
+              : "mobile-player-container--stuck"
+          }`}
+        >
+          {isPhotoMedia ? (
+            <div className="mobile-photo-wrap">
               <ImageViewer
                 src={detail.videoSrc}
                 poster={detail.poster}
@@ -63,7 +69,9 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
                   item.id && navigate(`/video/${item.id}`)
                 }
               />
-            ) : (
+            </div>
+          ) : (
+            <div className="mobile-player-wrap">
               <VideoPlayer
                 id={detail.id}
                 src={detail.videoSrc}
@@ -76,8 +84,8 @@ export const MobileVideoDetail = memo(function MobileVideoDetail({
                 transcodeStatus={detail.transcodeStatus}
                 transcodeError={detail.transcodeError}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile Segmented Navigation Tabs */}
