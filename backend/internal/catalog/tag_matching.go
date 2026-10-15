@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/video-site/backend/internal/fixedtags"
 	"github.com/video-site/backend/internal/tagging"
 )
 
@@ -58,10 +57,6 @@ func (c *Catalog) Matcher(ctx context.Context) (*tagging.Matcher, error) {
 }
 
 func (c *Catalog) buildMatcher(ctx context.Context) (*tagging.Matcher, error) {
-	builtinTagsEnabled, err := c.BuiltinTagsEnabled(ctx)
-	if err != nil {
-		return nil, err
-	}
 	avEnabled, err := c.avCodeMatchingEnabled(ctx)
 	if err != nil {
 		return nil, err
@@ -82,7 +77,7 @@ func (c *Catalog) buildMatcher(ctx context.Context) (*tagging.Matcher, error) {
 		if origin == avSeriesOrigin || origin == telegramTagOrigin {
 			continue
 		}
-		if !builtinTagsEnabled && normalizeTagSource(source) == fixedtags.SourceBuiltin {
+		if normalizeTagSource(source) == "builtin" {
 			continue
 		}
 		if !avEnabled && strings.EqualFold(label, avTagLabel) {
@@ -184,14 +179,7 @@ func (c *Catalog) LookupUserSelectableTagLabel(ctx context.Context, label string
 }
 
 func isUserSelectableTag(tag Tag) bool {
-	switch normalizeTagSource(tag.Source) {
-	case "user":
-		return true
-	case "builtin":
-		return !strings.EqualFold(tag.Label, avTagLabel)
-	default:
-		return false
-	}
+	return normalizeTagSource(tag.Source) == "user"
 }
 
 // MatchTags 对一段文本运行标签匹配，返回命中的标签名。
@@ -346,35 +334,31 @@ func (c *Catalog) ensureTagWithRules(ctx context.Context, label string, rule tag
 	if source == "" {
 		source = "user"
 	}
-	if source != fixedtags.SourceBuiltin && source != "user" {
+	if source == "builtin" {
+		return Tag{}, ErrBuiltinTagsDisabled
+	}
+	if source != "user" {
 		return Tag{}, ErrInvalidTagSource
 	}
 	return c.ensureTagDefinition(ctx, label, rule, source)
 }
 
-// ensureTagDefinition persists definitions for explicit user/builtin tags and
+// ensureTagDefinition persists definitions for explicit user tags and
 // the dedicated crawler/AV-series creators. It never derives labels from text.
 func (c *Catalog) ensureTagDefinition(ctx context.Context, label string, rule tagging.Rule, source string) (Tag, error) {
 	label = cleanTagLabel(label)
 	if label == "" {
 		return Tag{}, errors.New("tag label is required")
 	}
-	if isAVCodePollutedLabel(label) {
+	if isAVCodePollutedLabel(label) || strings.EqualFold(label, avTagLabel) {
 		label = avTagLabel
-		rule = avTagRule
-		source = fixedtags.SourceBuiltin
-	}
-	if source == "builtin" && !fixedtags.IsBuiltinLabel(label) {
-		return Tag{}, ErrInvalidTagSource
-	}
-	if source == fixedtags.SourceBuiltin {
-		enabled, err := c.BuiltinTagsEnabled(ctx)
-		if err != nil {
-			return Tag{}, err
+		if rule.IsEmpty() {
+			rule = avTagRule
 		}
-		if !enabled {
-			return Tag{}, ErrBuiltinTagsDisabled
-		}
+		source = "user"
+	}
+	if source == "builtin" {
+		return Tag{}, ErrBuiltinTagsDisabled
 	}
 	if source == "generated" {
 		tag, err := c.getTagByLabel(ctx, label)
@@ -399,42 +383,6 @@ VALUES (?, ?, ?, ?, ?)`, label, string(rulesJSON), source, now, now)
 	}
 	changed := inserted
 	if !inserted {
-		if source == fixedtags.SourceBuiltin {
-			res, err := c.db.ExecContext(ctx, `
-UPDATE tags
-   SET source = ?, updated_at = ?
- WHERE label = ? COLLATE NOCASE
-   AND source != ?
-   AND source != 'user'`,
-				source, now, label, source)
-			if err != nil {
-				return Tag{}, err
-			}
-			if n, err := res.RowsAffected(); err == nil && n > 0 {
-				changed = true
-			}
-		}
-		if strings.EqualFold(label, avTagLabel) && source == fixedtags.SourceBuiltin {
-			current, err := c.getTagByLabel(ctx, label)
-			if err != nil {
-				return Tag{}, err
-			}
-			legacyMissingPrefixes := current.MatchRules.IsEmpty() ||
-				(current.MatchRules.MatchAVCode && len(current.MatchRules.AVCodePrefixes) == 0)
-			if legacyMissingPrefixes {
-				res, err := c.db.ExecContext(ctx, `
-UPDATE tags
-   SET match_rules = ?, updated_at = ?
- WHERE label = ? COLLATE NOCASE`,
-					string(rulesJSON), now, label)
-				if err != nil {
-					return Tag{}, err
-				}
-				if n, err := res.RowsAffected(); err == nil && n > 0 {
-					changed = true
-				}
-			}
-		}
 		if !rule.IsEmpty() {
 			// 升级回填：已有行没有显式规则时补上默认规则。
 			res, err := c.db.ExecContext(ctx, `
@@ -455,7 +403,7 @@ UPDATE tags SET match_rules = ?, updated_at = ?
 			return Tag{}, err
 		}
 	}
-	if strings.EqualFold(label, avTagLabel) && (source == fixedtags.SourceBuiltin || source == "user") {
+	if strings.EqualFold(label, avTagLabel) && source == "user" {
 		if err := c.setAVCodeMatchingDisabled(ctx, false); err != nil {
 			return Tag{}, err
 		}
@@ -481,10 +429,6 @@ func (c *Catalog) ensureAVSeriesTag(ctx context.Context, series string) (Tag, er
 }
 
 func (c *Catalog) avCodeMatchingEnabled(ctx context.Context) (bool, error) {
-	builtinTagsEnabled, err := c.BuiltinTagsEnabled(ctx)
-	if err != nil || !builtinTagsEnabled {
-		return false, err
-	}
 	disabled, err := c.avCodeMatchingDisabled(ctx)
 	if err != nil || disabled {
 		return false, err

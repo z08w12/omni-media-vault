@@ -64,8 +64,8 @@ future_section:
 	if strings.Contains(text, "drives:") || strings.Contains(text, "obsolete template placeholder") {
 		t.Fatalf("retired empty drive placeholder remains:\n%s", text)
 	}
-	if !strings.Contains(text, "builtin_pack_enabled: false") {
-		t.Fatalf("built-in tag setting was not migrated:\n%s", text)
+	if strings.Contains(text, "builtin_pack_enabled:") {
+		t.Fatalf("built-in tag setting was not removed:\n%s", text)
 	}
 	want := LiveSettings{PreviewEnabled: true, NightlyStartTime: "04:25", NightlyTimezone: "Asia/Shanghai", BuiltinTagsEnabled: false, PreviewConcurrency: DefaultGenerationConcurrency, ThumbnailConcurrency: 1, FingerprintConcurrency: 1}
 	if got := manager.LiveSettings(); got != want {
@@ -84,7 +84,7 @@ func TestManagerYAMLValuesWinOverLegacySQLiteValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := LiveSettings{PreviewEnabled: true, NightlyStartTime: "02:10", NightlyTimezone: "Asia/Shanghai", BuiltinTagsEnabled: true, PreviewConcurrency: DefaultGenerationConcurrency, ThumbnailConcurrency: 1, FingerprintConcurrency: 1}
+	want := LiveSettings{PreviewEnabled: true, NightlyStartTime: "02:10", NightlyTimezone: "Asia/Shanghai", BuiltinTagsEnabled: false, PreviewConcurrency: DefaultGenerationConcurrency, ThumbnailConcurrency: 1, FingerprintConcurrency: 1}
 	if got := manager.LiveSettings(); got != want {
 		t.Fatalf("live settings = %#v, want YAML %#v", got, want)
 	}
@@ -155,7 +155,7 @@ func TestManagerReloadPublishesExternalValidChangeAndKeepsLastGoodOnError(t *tes
 	if err != nil || !changed {
 		t.Fatalf("reload changed=%v err=%v", changed, err)
 	}
-	want := LiveSettings{PreviewEnabled: true, NightlyDisabled: true, NightlyStartTime: "06:30", NightlyTimezone: "Asia/Shanghai", BuiltinTagsEnabled: true, PreviewConcurrency: DefaultGenerationConcurrency, ThumbnailConcurrency: 1, FingerprintConcurrency: 1}
+	want := LiveSettings{PreviewEnabled: true, NightlyDisabled: true, NightlyStartTime: "06:30", NightlyTimezone: "Asia/Shanghai", BuiltinTagsEnabled: false, PreviewConcurrency: DefaultGenerationConcurrency, ThumbnailConcurrency: 1, FingerprintConcurrency: 1}
 	if got := manager.LiveSettings(); got != want {
 		t.Fatalf("settings = %#v, want %#v", got, want)
 	}
@@ -186,11 +186,11 @@ func TestRestartRequiredComparisonIgnoresOnlyLivePaths(t *testing.T) {
 }
 
 func TestManagerRestoresYAMLAndLiveSnapshotWhenLiveApplyFails(t *testing.T) {
-	manager, path := newManagerForTest(t, "nightly:\n  start_time: \"01:00\"\ntags:\n  builtin_pack_enabled: true\n")
+	manager, path := newManagerForTest(t, "nightly:\n  start_time: \"01:00\"\n  disabled: false\n")
 	var applied []LiveSettings
 	if err := manager.SetApply(func(settings LiveSettings) error {
 		applied = append(applied, settings)
-		if !settings.BuiltinTagsEnabled {
+		if settings.NightlyDisabled {
 			return errors.New("catalog unavailable")
 		}
 		return nil
@@ -202,7 +202,7 @@ func TestManagerRestoresYAMLAndLiveSnapshotWhenLiveApplyFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = manager.ReplaceYAML([]byte("nightly:\n  start_time: \"01:00\"\ntags:\n  builtin_pack_enabled: false\n"), version)
+	_, err = manager.ReplaceYAML([]byte("nightly:\n  start_time: \"01:00\"\n  disabled: true\n"), version)
 	if err == nil || !strings.Contains(err.Error(), "catalog unavailable") {
 		t.Fatalf("replace error = %v, want live apply failure", err)
 	}
@@ -213,10 +213,10 @@ func TestManagerRestoresYAMLAndLiveSnapshotWhenLiveApplyFails(t *testing.T) {
 	if string(written) != string(original) {
 		t.Fatalf("failed live apply changed YAML:\n%s", written)
 	}
-	if got := manager.LiveSettings(); !got.BuiltinTagsEnabled {
+	if got := manager.LiveSettings(); got.NightlyDisabled {
 		t.Fatalf("failed live apply changed snapshot: %#v", got)
 	}
-	if len(applied) != 3 || !applied[0].BuiltinTagsEnabled || applied[1].BuiltinTagsEnabled || !applied[2].BuiltinTagsEnabled {
+	if len(applied) != 3 || applied[0].NightlyDisabled || !applied[1].NightlyDisabled || applied[2].NightlyDisabled {
 		t.Fatalf("apply sequence = %#v, want current, rejected candidate, rollback", applied)
 	}
 }

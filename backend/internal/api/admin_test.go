@@ -2097,32 +2097,22 @@ func TestHandleDeleteTagRemovesTagFromVideos(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteTagAllowsBuiltinTag(t *testing.T) {
+func TestHandleDeleteTagRemovesTag(t *testing.T) {
 	ctx := context.Background()
 	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
 	if err != nil {
 		t.Fatalf("open catalog: %v", err)
 	}
 	t.Cleanup(func() { _ = cat.Close() })
-	tags, err := cat.ListTags(ctx)
+	tag, err := cat.EnsureTag(ctx, "测试标签", "user")
 	if err != nil {
-		t.Fatalf("list tags: %v", err)
-	}
-	var builtinID int64
-	for _, tag := range tags {
-		if tag.Label == "奶子" {
-			builtinID = tag.ID
-			break
-		}
-	}
-	if builtinID == 0 {
-		t.Fatal("奶子 builtin tag missing")
+		t.Fatalf("create tag: %v", err)
 	}
 	req := requestWithRouteParam(
 		http.MethodDelete,
 		"/admin/api/tags/1",
 		"id",
-		strconv.FormatInt(builtinID, 10),
+		strconv.FormatInt(tag.ID, 10),
 		strings.NewReader(""),
 	)
 	rr := httptest.NewRecorder()

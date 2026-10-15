@@ -37,16 +37,48 @@ function ruleBody(css: string, selector: string): string {
 
 test("admin tags API treats a legacy null collection as empty", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response("null", {
+  const originalHeaders = (globalThis as any).Headers;
+  const originalFormData = (globalThis as any).FormData;
+  if (!originalHeaders) {
+    (globalThis as any).Headers = class MockHeaders {
+      private map = new Map<string, string>();
+      constructor(init?: any) {
+        if (init) {
+          Object.entries(init).forEach(([k, v]) => this.map.set(k.toLowerCase(), String(v)));
+        }
+      }
+      has(k: string) { return this.map.has(k.toLowerCase()); }
+      set(k: string, v: string) { this.map.set(k.toLowerCase(), v); }
+      get(k: string) { return this.map.get(k.toLowerCase()) ?? null; }
+    };
+  }
+  if (!originalFormData) {
+    (globalThis as any).FormData = class MockFormData {};
+  }
+  globalThis.fetch = (async () => {
+    if (typeof Response !== "undefined") {
+      return new Response("null", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return {
       status: 200,
-      headers: { "Content-Type": "application/json" },
-    })) as typeof fetch;
+      ok: true,
+      headers: {
+        get: (h: string) => (h.toLowerCase() === "content-type" ? "application/json" : null),
+      },
+      json: async () => null,
+      text: async () => "null",
+    } as any;
+  }) as typeof fetch;
 
   try {
     assert.deepEqual(await listTags(), []);
   } finally {
     globalThis.fetch = originalFetch;
+    (globalThis as any).Headers = originalHeaders;
+    (globalThis as any).FormData = originalFormData;
   }
 });
 
@@ -120,7 +152,7 @@ test("admin tags keep builtin, user, and auto-generated tag management", () => {
   assert.doesNotMatch(tagsPageSource, /关闭后扫描只匹配已有标签。/);
   assert.doesNotMatch(tagsPageSource, /<strong>\{autoGenerateTagsEnabled \? "开启" : "关闭"\}<\/strong>/);
   assert.doesNotMatch(tagsPageSource, /AI 辅助打标|AI 打标|tagging\.llm/);
-  assert.match(tagsPageSource, /const TAG_SOURCE_FILTERS = \["builtin", "user", "generated"\]/);
+  assert.match(tagsPageSource, /const TAG_SOURCE_FILTERS = \["user", "generated"\]/);
   assert.match(tagsPageSource, /function tagSourceKey/);
   assert.match(tagsPageSource, /tag\.crawlerOwned \|\| tag\.source === "generated" \? "generated" : tag\.source/);
   assert.match(tagsPageSource, /source === "crawler" \|\| source === "generated"/);

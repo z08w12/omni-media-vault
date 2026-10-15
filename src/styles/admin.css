@@ -5992,8 +5992,7 @@ body.admin-mobile-nav-open {
   }
 
   #config-automation .admin-config-section__body,
-  #config-preview .admin-config-section__body,
-  #config-tags .admin-config-section__body {
+  #config-preview .admin-config-section__body {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

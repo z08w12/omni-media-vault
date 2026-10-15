@@ -55,6 +55,9 @@ func TestStoredDirectoryNamesSupportTagEditsAndRetagging(t *testing.T) {
 			_ = cat.Close()
 		}
 	})
+	if _, err := cat.EnsureTag(ctx, "AV", "user"); err != nil {
+		t.Fatal(err)
+	}
 	dirNames := []string{"旅行 ABP-123", "2026"}
 	if err := cat.UpsertVideo(ctx, &Video{
 		ID: "directory-video", DriveID: "drive", FileID: "clip", FileName: "clip.mp4",

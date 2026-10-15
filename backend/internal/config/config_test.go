@@ -273,8 +273,8 @@ func TestParseBuiltinTagConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !defaults.Tags.IsBuiltinPackEnabled() {
-		t.Fatal("built-in tags should default to enabled")
+	if defaults.Tags.IsBuiltinPackEnabled() {
+		t.Fatal("built-in tags should default to disabled")
 	}
 
 	disabled, err := Parse([]byte("tags:\n  builtin_pack_enabled: false\n"))

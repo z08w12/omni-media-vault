@@ -1350,7 +1350,7 @@ func TestHandleUploadVideoSavesFileVideoTagsAndQueuesPreview(t *testing.T) {
 	}
 	req := multipartUploadRequest(t, map[string]string{
 		"title": "用户上传标题",
-		"tags":  "奶子,女大,人妻,后入,制服,美臀,口交,自定义上传",
+		"tags":  "自定义上传",
 	}, "clip.mp4", "video-bytes")
 	rr := httptest.NewRecorder()
 
@@ -1382,7 +1382,7 @@ func TestHandleUploadVideoSavesFileVideoTagsAndQueuesPreview(t *testing.T) {
 	if got.FileID != "用户上传标题.mp4" || got.FileName != got.FileID {
 		t.Fatalf("file identity = id %q name %q, want title-based physical name", got.FileID, got.FileName)
 	}
-	if !sameStringSet(got.Tags, []string{"奶子", "女大", "人妻", "后入", "制服", "美臀", "口交", "自定义上传"}) {
+	if !sameStringSet(got.Tags, []string{"自定义上传"}) {
 		t.Fatalf("tags = %#v, want selected tags", got.Tags)
 	}
 	if got.PreviewStatus != "pending" {
@@ -1922,8 +1922,8 @@ func TestHandleUploadTagsReturnsManagedUserChoices(t *testing.T) {
 	for _, tag := range got {
 		labels = append(labels, tag.Label)
 	}
-	if !containsString(labels, "奶子") || !containsString(labels, "自定义上传") {
-		t.Fatalf("labels = %#v, want builtin and user tags", labels)
+	if !containsString(labels, "自定义上传") {
+		t.Fatalf("labels = %#v, want user tags", labels)
 	}
 	if containsString(labels, "AV") || containsString(labels, "爬虫来源") {
 		t.Fatalf("labels = %#v, want no inferred or crawler tags", labels)
@@ -1937,16 +1937,20 @@ func TestInvalidateTagCachePublishesCatalogChangesImmediately(t *testing.T) {
 		t.Fatalf("open catalog: %v", err)
 	}
 	t.Cleanup(func() { _ = cat.Close() })
+	tag, err := cat.EnsureTag(ctx, "测试标签", "user")
+	if err != nil {
+		t.Fatalf("ensure tag: %v", err)
+	}
 	server := &Server{Catalog: cat}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/tags", nil)
 	recorder := httptest.NewRecorder()
 	server.handleTags(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"label":"美臀"`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"label":"测试标签"`) {
 		t.Fatalf("initial tags status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if _, err := cat.SetBuiltinTagsEnabled(ctx, false); err != nil {
-		t.Fatalf("disable builtin tags: %v", err)
+	if _, err := cat.DeleteTag(ctx, tag.ID); err != nil {
+		t.Fatalf("delete tag: %v", err)
 	}
 
 	server.InvalidateTagCache()
@@ -1955,8 +1959,8 @@ func TestInvalidateTagCachePublishesCatalogChangesImmediately(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("refreshed tags status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if strings.Contains(recorder.Body.String(), `"label":"美臀"`) {
-		t.Fatalf("refreshed tags still contain builtins: %s", recorder.Body.String())
+	if strings.Contains(recorder.Body.String(), `"label":"测试标签"`) {
+		t.Fatalf("refreshed tags still contain deleted tag: %s", recorder.Body.String())
 	}
 }
 

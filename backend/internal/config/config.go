@@ -18,7 +18,7 @@ const (
 	DefaultNightlyDisabled       = false
 	DefaultNightlyStartTime      = "01:00"
 	DefaultNightlyTimezone       = schedule.DefaultTimezone
-	DefaultBuiltinTagsEnabled    = true
+	DefaultBuiltinTagsEnabled    = false
 	DefaultGenerationConcurrency = 1
 	MaxGenerationConcurrency     = 5
 )
@@ -249,14 +249,13 @@ type Nightly struct {
 	CronHour int `yaml:"cron_hour,omitempty"`
 }
 
-// Tags controls the built-in tag catalog. A pointer preserves the distinction
-// between an omitted legacy field and an explicit false value during migration.
+// Tags controls the built-in tag catalog (deprecated).
 type Tags struct {
 	BuiltinPackEnabled *bool `yaml:"builtin_pack_enabled,omitempty"`
 }
 
 func (t Tags) IsBuiltinPackEnabled() bool {
-	return t.BuiltinPackEnabled == nil || *t.BuiltinPackEnabled
+	return false
 }
 
 func NormalizeNightlyStartTime(value string) (string, error) {
@@ -421,7 +420,7 @@ func (c *Config) applyDefaults() error {
 		c.Nightly.Timezone = timezone
 	}
 	if c.Tags.BuiltinPackEnabled == nil {
-		enabled := DefaultBuiltinTagsEnabled
+		enabled := false
 		c.Tags.BuiltinPackEnabled = &enabled
 	}
 	if c.RemoteUpload.DiskReserveBytes <= 0 {

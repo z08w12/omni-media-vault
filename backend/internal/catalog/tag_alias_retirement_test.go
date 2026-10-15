@@ -28,7 +28,10 @@ func TestOpenDropsTagAliasesWithoutChangingRulesOrAssignments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create keyword tag: %v", err)
 	}
-	av := mustTagByLabel(t, ctx, cat, "AV")
+	av, err := cat.EnsureTag(ctx, "AV", "user")
+	if err != nil {
+		t.Fatalf("create AV tag: %v", err)
+	}
 	av, err = cat.UpdateTag(ctx, av.ID, tagging.Rule{MatchAVCode: true, AVCodePrefixes: []string{"FHD"}})
 	if err != nil {
 		t.Fatalf("configure AV prefixes: %v", err)

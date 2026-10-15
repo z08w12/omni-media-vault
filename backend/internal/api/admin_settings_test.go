@@ -65,8 +65,8 @@ func TestPutSettingsRejectsBuiltinTagConfigOutsideConfigYAML(t *testing.T) {
 	}
 
 	enabled, err := cat.BuiltinTagsEnabled(context.Background())
-	if err != nil || !enabled {
-		t.Fatalf("builtin setting after rejected requests = %v, %v; want enabled", enabled, err)
+	if err != nil || enabled {
+		t.Fatalf("builtin setting after rejected requests = %v, %v; want disabled", enabled, err)
 	}
 	if tagChanges != 0 {
 		t.Fatalf("tag cache invalidations = %d, want 0", tagChanges)

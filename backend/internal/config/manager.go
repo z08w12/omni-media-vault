@@ -277,15 +277,8 @@ func (m *Manager) MigrateLegacyRuntimeSettings(legacy LegacyRuntimeSettings) (bo
 		setScalarValue(nightly, "timezone", parsed.Nightly.Timezone)
 		changed = true
 	}
-	tags, tagsExist := mappingValue(document, "tags")
-	_, builtinTagsExist := mappingValue(tags, "builtin_pack_enabled")
-	if !tagsExist || !builtinTagsExist {
-		enabled := parsed.Tags.IsBuiltinPackEnabled()
-		if legacy.BuiltinTagsEnabled != nil {
-			enabled = *legacy.BuiltinTagsEnabled
-		}
-		tags = ensureMappingValue(document, "tags")
-		setBooleanValue(tags, "builtin_pack_enabled", enabled)
+	tags, _ := mappingValue(document, "tags")
+	if deleteMappingValue(tags, "builtin_pack_enabled") {
 		changed = true
 	}
 

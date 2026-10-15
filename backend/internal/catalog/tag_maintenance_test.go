@@ -21,7 +21,11 @@ func openTagMaintenanceTestCatalog(t *testing.T) (*Catalog, context.Context) {
 			t.Fatalf("close catalog: %v", err)
 		}
 	})
-	return cat, context.Background()
+	ctx := context.Background()
+	if _, err := cat.EnsureTag(ctx, avTagLabel, "user"); err != nil {
+		t.Fatalf("ensure AV tag: %v", err)
+	}
+	return cat, ctx
 }
 
 func seedTagMaintenanceVideo(t *testing.T, cat *Catalog, id, title, fileName string) {

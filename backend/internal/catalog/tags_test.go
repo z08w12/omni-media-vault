@@ -191,6 +191,9 @@ func TestUpsertVideoMatchesExistingTagsForNewVideo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cat.Close() })
 
+	if _, err := cat.ensureTagWithRules(ctx, "奶子", tagging.Rule{Keywords: []string{"奶子", "大奶"}}, "user"); err != nil {
+		t.Fatalf("ensure tag: %v", err)
+	}
 	now := time.Now()
 	if err := cat.UpsertVideo(ctx, &Video{
 		ID:          "new-auto-tagged",
@@ -550,11 +553,11 @@ func TestUserSelectableTagsFollowManagedCatalog(t *testing.T) {
 	for _, tag := range tags {
 		labels = append(labels, tag.Label)
 	}
-	if !stringSliceContains(labels, "奶子") || !stringSliceContains(labels, "自定义上传") {
-		t.Fatalf("selectable labels = %#v, want builtin and user tags", labels)
+	if !stringSliceContains(labels, "自定义上传") {
+		t.Fatalf("selectable labels = %#v, want user tags", labels)
 	}
-	if stringSliceContains(labels, "AV") || stringSliceContains(labels, "爬虫来源") {
-		t.Fatalf("selectable labels = %#v, want no inferred or crawler tags", labels)
+	if stringSliceContains(labels, "奶子") || stringSliceContains(labels, "AV") || stringSliceContains(labels, "爬虫来源") {
+		t.Fatalf("selectable labels = %#v, want no builtin or crawler tags", labels)
 	}
 
 	canonical, ok, err := cat.LookupUserSelectableTagLabel(ctx, " 自定义上传 ")
@@ -574,21 +577,24 @@ func TestUserSelectableTagsFollowManagedCatalog(t *testing.T) {
 	}
 }
 
-func TestDeleteTagAllowsBuiltinTagsWithoutMaintenanceReseed(t *testing.T) {
+func TestDeleteTagDoesNotReseedOnMaintenanceOrReopen(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/catalog.db"
-	label := "美臀"
+	label := "自定义标签"
 	cat, err := Open(path)
 	if err != nil {
 		t.Fatalf("open catalog: %v", err)
 	}
 
-	tag := mustTagByLabel(t, ctx, cat, label)
+	tag, err := cat.EnsureTag(ctx, label, "user")
+	if err != nil {
+		t.Fatalf("create user tag: %v", err)
+	}
 	if _, err := cat.DeleteTag(ctx, tag.ID); err != nil {
-		t.Fatalf("delete builtin tag: %v", err)
+		t.Fatalf("delete tag: %v", err)
 	}
 	if _, err := cat.getTagByLabel(ctx, label); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("deleted builtin tag still exists: %v", err)
+		t.Fatalf("deleted tag still exists: %v", err)
 	}
 	if err := cat.Close(); err != nil {
 		t.Fatalf("close catalog: %v", err)
@@ -600,144 +606,51 @@ func TestDeleteTagAllowsBuiltinTagsWithoutMaintenanceReseed(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	if _, err := reopened.getTagByLabel(ctx, label); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("deleted builtin tag was recreated on reopen: %v", err)
+		t.Fatalf("deleted tag was recreated on reopen: %v", err)
 	}
 	if err := reopened.ReconcileVideoTags(ctx); err != nil {
-		t.Fatalf("post-startup maintenance with deleted builtin tag: %v", err)
+		t.Fatalf("post-startup maintenance with deleted tag: %v", err)
 	}
 	if _, err := reopened.getTagByLabel(ctx, label); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("deleted builtin tag was recreated by maintenance: %v", err)
+		t.Fatalf("deleted tag was recreated by maintenance: %v", err)
 	}
 }
 
-func TestBuiltinTagPackSwitchRemovesAndRestoresCatalogState(t *testing.T) {
+func TestBuiltinTagsArePermanentlyDisabled(t *testing.T) {
+	ctx := context.Background()
+	cat, err := Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	t.Cleanup(func() { _ = cat.Close() })
+
+	enabled, err := cat.BuiltinTagsEnabled(ctx)
+	if err != nil || enabled {
+		t.Fatalf("initial builtin setting = %v, %v; want disabled", enabled, err)
+	}
+	_, err = cat.SetBuiltinTagsEnabled(ctx, true)
+	if !errors.Is(err, ErrBuiltinTagsDisabled) {
+		t.Fatalf("enable builtin tags = %v; want ErrBuiltinTagsDisabled", err)
+	}
+	changed, err := cat.SetBuiltinTagsEnabled(ctx, false)
+	if err != nil || changed {
+		t.Fatalf("disable builtin tags = %v, %v; want unchanged", changed, err)
+	}
+	if _, err := cat.ensureTagWithRules(ctx, "美臀", tagging.Rule{}, "builtin"); !errors.Is(err, ErrBuiltinTagsDisabled) {
+		t.Fatalf("creating builtin returned %v, want ErrBuiltinTagsDisabled", err)
+	}
+	assertBuiltinTagPackState(t, ctx, cat, false, 0)
+}
+
+func TestBuiltinTagPackStaysEmpty(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/catalog.db"
 	cat, err := Open(path)
 	if err != nil {
 		t.Fatalf("open catalog: %v", err)
 	}
-
-	enabled, err := cat.BuiltinTagsEnabled(ctx)
-	if err != nil || !enabled {
-		t.Fatalf("initial builtin setting = %v, %v; want enabled", enabled, err)
-	}
-	now := time.Now()
-	if err := cat.UpsertVideo(ctx, &Video{
-		ID:          "builtin-switch-video",
-		DriveID:     "drive",
-		FileID:      "file",
-		FileName:    "SSNI-001.mp4",
-		Title:       "翘臀 自定义 SSNI-001",
-		PublishedAt: now,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("seed video: %v", err)
-	}
-	if _, err := cat.CreateTagAndClassify(ctx, "自定义", "user"); err != nil {
-		t.Fatalf("create custom tag: %v", err)
-	}
-	if err := cat.ReconcileVideoTags(ctx); err != nil {
-		t.Fatalf("initial tag maintenance: %v", err)
-	}
-
-	video, err := cat.GetVideo(ctx, "builtin-switch-video")
-	if err != nil {
-		t.Fatalf("get initially tagged video: %v", err)
-	}
-	for _, label := range []string{"自定义", "AV", "美臀"} {
-		if !stringSliceContains(video.Tags, label) {
-			t.Fatalf("initial video tags = %#v, want %q", video.Tags, label)
-		}
-	}
-
-	changed, err := cat.SetBuiltinTagsEnabled(ctx, false)
-	if err != nil || !changed {
-		t.Fatalf("disable builtin tags = %v, %v; want changed", changed, err)
-	}
-	assertBuiltinTagPackState(t, ctx, cat, false, 0)
-	video, err = cat.GetVideo(ctx, "builtin-switch-video")
-	if err != nil {
-		t.Fatalf("get video after disabling: %v", err)
-	}
-	if !sameStrings(video.Tags, []string{"自定义"}) {
-		t.Fatalf("video tags after disabling = %#v, want custom tag only", video.Tags)
-	}
-	var seriesCount int
-	if err := cat.db.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM tags WHERE source = 'generated' AND origin = ?`, avSeriesOrigin).Scan(&seriesCount); err != nil {
-		t.Fatalf("count AV series tags: %v", err)
-	}
-	if seriesCount != 0 {
-		t.Fatalf("AV series tag count after disabling = %d, want 0", seriesCount)
-	}
-	if _, err := cat.ensureTagWithRules(ctx, "美臀", tagging.Rule{}, "builtin"); !errors.Is(err, ErrBuiltinTagsDisabled) {
-		t.Fatalf("creating builtin while disabled returned %v, want ErrBuiltinTagsDisabled", err)
-	}
-	changed, err = cat.SetBuiltinTagsEnabled(ctx, false)
-	if err != nil || changed {
-		t.Fatalf("second disable = %v, %v; want unchanged", changed, err)
-	}
-
-	if err := cat.Close(); err != nil {
-		t.Fatalf("close catalog: %v", err)
-	}
-	cat, err = Open(path)
-	if err != nil {
-		t.Fatalf("reopen disabled catalog: %v", err)
-	}
 	t.Cleanup(func() { _ = cat.Close() })
 	assertBuiltinTagPackState(t, ctx, cat, false, 0)
-
-	changed, err = cat.SetBuiltinTagsEnabled(ctx, true)
-	if err != nil || !changed {
-		t.Fatalf("enable builtin tags = %v, %v; want changed", changed, err)
-	}
-	assertBuiltinTagPackState(t, ctx, cat, true, 8)
-	if err := cat.ReconcileVideoTags(ctx); err != nil {
-		t.Fatalf("tag maintenance after enabling: %v", err)
-	}
-	video, err = cat.GetVideo(ctx, "builtin-switch-video")
-	if err != nil {
-		t.Fatalf("get video after enabling: %v", err)
-	}
-	for _, label := range []string{"自定义", "AV", "美臀"} {
-		if !stringSliceContains(video.Tags, label) {
-			t.Fatalf("restored video tags = %#v, want %q", video.Tags, label)
-		}
-	}
-}
-
-func TestBuiltinTagPackDisabledBeforeInitializationStaysEmpty(t *testing.T) {
-	ctx := context.Background()
-	path := t.TempDir() + "/catalog.db"
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatalf("open raw db: %v", err)
-	}
-	if _, err := db.Exec(schemaSQL); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO settings (key, value, updated_at) VALUES (?, 'false', ?)`,
-		settingBuiltinTagsEnabled, time.Now().UnixMilli()); err != nil {
-		t.Fatalf("disable builtin pack: %v", err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	cat, err := Open(path)
-	if err != nil {
-		t.Fatalf("open migrated catalog: %v", err)
-	}
-	t.Cleanup(func() { _ = cat.Close() })
-	assertBuiltinTagPackState(t, ctx, cat, false, 0)
-	marker, err := cat.GetSetting(ctx, settingBuiltinTagPackInit, "")
-	if err != nil || !parseSettingBool(marker, false) {
-		t.Fatalf("builtin initialization marker = %q, %v; want true", marker, err)
-	}
 }
 
 func assertBuiltinTagPackState(t *testing.T, ctx context.Context, cat *Catalog, wantEnabled bool, wantCount int) {
@@ -759,7 +672,7 @@ func assertBuiltinTagPackState(t *testing.T, ctx context.Context, cat *Catalog, 
 	}
 }
 
-func TestMigrateResetsLegacyTagPoolToUserTagsPlusBuiltinPack(t *testing.T) {
+func TestMigratePurgesAllBuiltinTagsAndPreservesUserTags(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/catalog.db"
 	db, err := sql.Open("sqlite", path)
@@ -811,36 +724,26 @@ VALUES
 	if custom.Source != "user" {
 		t.Fatalf("custom tag source = %q, want user", custom.Source)
 	}
-	for _, label := range []string{"旧自动", "旧爬虫"} {
+	for _, label := range []string{"女大", "旧自动"} {
 		if _, err := cat.getTagByLabel(ctx, label); !errors.Is(err, sql.ErrNoRows) {
-			t.Fatalf("legacy non-user tag %q still exists: %v", label, err)
+			t.Fatalf("legacy tag %q still exists: %v", label, err)
 		}
 	}
-	tag := mustTagByLabel(t, ctx, cat, "女大")
-	if tag.Source != "builtin" {
-		t.Fatalf("女大 source = %q, want builtin", tag.Source)
+	crawler := mustTagByLabel(t, ctx, cat, "旧爬虫")
+	if crawler.Source != "generated" || !crawler.CrawlerOwned {
+		t.Fatalf("crawler tag = %#v, want generated crawler tag", crawler)
 	}
-	want := []string{"女大", "大一", "大二", "大三", "大四", "学妹", "学姐", "研究生"}
-	if !sameStrings(tag.MatchRules.Keywords, want) {
-		t.Fatalf("keywords = %#v, want %#v", tag.MatchRules.Keywords, want)
-	}
+	assertBuiltinTagPackState(t, ctx, cat, false, 0)
 	video, err := cat.GetVideo(ctx, "legacy-video")
 	if err != nil {
 		t.Fatalf("get migrated video: %v", err)
 	}
-	if !sameStrings(video.Tags, []string{"我的标签"}) {
-		t.Fatalf("video tags = %#v, want only user tag", video.Tags)
-	}
-	marker, err := cat.GetSetting(ctx, settingBuiltinTagPackInit, "")
-	if err != nil {
-		t.Fatalf("read builtin init marker: %v", err)
-	}
-	if !parseSettingBool(marker, false) {
-		t.Fatalf("builtin init marker = %q, want true", marker)
+	if !sameStrings(video.Tags, []string{"我的标签", "旧爬虫"}) {
+		t.Fatalf("video tags = %#v, want user and crawler tags", video.Tags)
 	}
 }
 
-func TestSeedBuiltinTagPackPreservesCustomBuiltinRules(t *testing.T) {
+func TestRemoveRetiredTagRuleFields(t *testing.T) {
 	ctx := context.Background()
 	cat, err := Open(t.TempDir() + "/catalog.db")
 	if err != nil {
@@ -848,24 +751,26 @@ func TestSeedBuiltinTagPackPreservesCustomBuiltinRules(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cat.Close() })
 
+	tag, err := cat.EnsureTag(ctx, "测试标签", "user")
+	if err != nil {
+		t.Fatalf("create user tag: %v", err)
+	}
+
 	customRule := `{"keywords":["custom-only"],"words":["legacy-word"],"excludes":["custom-exclude"]}`
 	if _, err := cat.db.ExecContext(ctx,
-		`UPDATE tags SET source = 'builtin', match_rules = ? WHERE label = '奶子'`,
-		customRule); err != nil {
+		`UPDATE tags SET match_rules = ? WHERE id = ?`,
+		customRule, tag.ID); err != nil {
 		t.Fatalf("seed custom rule: %v", err)
 	}
 	if err := cat.removeRetiredTagRuleFields(ctx); err != nil {
 		t.Fatalf("remove retired fields: %v", err)
 	}
-	if err := cat.seedBuiltinTagPack(ctx); err != nil {
-		t.Fatalf("seed builtin pack: %v", err)
-	}
-	tag := mustTagByLabel(t, ctx, cat, "奶子")
-	if !sameStrings(tag.MatchRules.Keywords, []string{"custom-only"}) {
-		t.Fatalf("custom keywords overwritten: %#v", tag.MatchRules.Keywords)
+	updated := mustTagByLabel(t, ctx, cat, "测试标签")
+	if !sameStrings(updated.MatchRules.Keywords, []string{"custom-only"}) {
+		t.Fatalf("custom keywords overwritten: %#v", updated.MatchRules.Keywords)
 	}
 	var raw string
-	if err := cat.db.QueryRowContext(ctx, `SELECT match_rules FROM tags WHERE label = '奶子'`).Scan(&raw); err != nil {
+	if err := cat.db.QueryRowContext(ctx, `SELECT match_rules FROM tags WHERE id = ?`, tag.ID).Scan(&raw); err != nil {
 		t.Fatalf("read raw match_rules: %v", err)
 	}
 	if strings.Contains(raw, `"words"`) || strings.Contains(raw, `"excludes"`) {
@@ -873,25 +778,22 @@ func TestSeedBuiltinTagPackPreservesCustomBuiltinRules(t *testing.T) {
 	}
 }
 
-func TestBuiltinKeywordDeletionSurvivesMaintenanceAndReopen(t *testing.T) {
+func TestTagKeywordDeletionSurvivesMaintenanceAndReopen(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/catalog.db"
 	cat, err := Open(path)
 	if err != nil {
 		t.Fatalf("open catalog: %v", err)
 	}
-	tag := mustTagByLabel(t, ctx, cat, "奶子")
-	var keywords []string
-	for _, keyword := range tag.MatchRules.Keywords {
-		if keyword != "大奶" {
-			keywords = append(keywords, keyword)
-		}
+	tag, err := cat.EnsureTag(ctx, "奶子", "user")
+	if err != nil {
+		t.Fatalf("create user tag: %v", err)
 	}
-	if stringSliceContains(keywords, "大奶") || !stringSliceContains(tag.MatchRules.Keywords, "大奶") {
-		t.Fatalf("test setup failed, keywords = %#v", tag.MatchRules.Keywords)
+	if _, err := cat.UpdateTag(ctx, tag.ID, tagging.Rule{Keywords: []string{"奶子", "大奶"}}); err != nil {
+		t.Fatalf("update keywords: %v", err)
 	}
-	if _, err := cat.UpdateTag(ctx, tag.ID, tagging.Rule{Keywords: keywords}); err != nil {
-		t.Fatalf("update builtin keywords: %v", err)
+	if _, err := cat.UpdateTag(ctx, tag.ID, tagging.Rule{Keywords: []string{"奶子"}}); err != nil {
+		t.Fatalf("update keywords: %v", err)
 	}
 	if err := cat.ReconcileVideoTags(ctx); err != nil {
 		t.Fatalf("post-startup maintenance: %v", err)
@@ -925,6 +827,14 @@ func TestPostStartupTagMaintenanceClassifiesSystemTagsForExistingVideos(t *testi
 		t.Fatalf("create schema: %v", err)
 	}
 	now := time.Now().UnixMilli()
+	if _, err := db.Exec(`
+INSERT INTO tags (label, match_rules, source, created_at, updated_at)
+VALUES
+	('奶子', '{"keywords":["奶子","巨乳"]}', 'user', ?, ?),
+	('后入', '{"keywords":["后入"]}', 'user', ?, ?)`,
+		now, now, now, now); err != nil {
+		t.Fatalf("seed tags: %v", err)
+	}
 	if _, err := db.Exec(`
 INSERT INTO videos (id, drive_id, file_id, title, tags, tags_manual, published_at, created_at, updated_at)
 VALUES
@@ -1388,8 +1298,8 @@ func TestCreateTagAndClassifyMapsAVCodeLabelToAV(t *testing.T) {
 		if tag.Label == "SSNI-001" {
 			t.Fatal("created standalone AV code tag SSNI-001")
 		}
-		if tag.Label == "AV" && tag.Source != "builtin" {
-			t.Fatalf("AV source = %q, want builtin", tag.Source)
+		if tag.Label == "AV" && tag.Source != "user" {
+			t.Fatalf("AV source = %q, want user", tag.Source)
 		}
 	}
 }
@@ -1411,7 +1321,7 @@ func TestAVTagUsesCodeRuleNotLegacyAliases(t *testing.T) {
 	now := time.Now().UnixMilli()
 	if _, err := db.ExecContext(ctx, `
 INSERT INTO tags (label, aliases, match_rules, source, origin, created_at, updated_at)
-VALUES ('AV', ?, '{}', 'generated', '', ?, ?)`, string(aliasesJSON), now, now); err != nil {
+VALUES ('AV', ?, '{}', 'user', '', ?, ?)`, string(aliasesJSON), now, now); err != nil {
 		t.Fatalf("seed legacy AV tag shape: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -1442,8 +1352,8 @@ VALUES ('video-av-code', 'drive', 'file-av-code', 'SSNI-001', 'SSNI-001.mp4', '[
 	if err != nil {
 		t.Fatalf("get AV tag: %v", err)
 	}
-	if tag.Source != "builtin" {
-		t.Fatalf("AV source = %q, want builtin", tag.Source)
+	if tag.Source != "user" {
+		t.Fatalf("AV source = %q, want user", tag.Source)
 	}
 	if !tag.MatchRules.MatchAVCode {
 		t.Fatalf("AV match rules = %#v, want MatchAVCode", tag.MatchRules)
@@ -1479,6 +1389,9 @@ func TestAVTagPrefixesAreEditable(t *testing.T) {
 			t.Fatalf("close catalog: %v", err)
 		}
 	})
+	if _, err := cat.EnsureTag(ctx, "AV", "user"); err != nil {
+		t.Fatalf("ensure AV tag: %v", err)
+	}
 
 	if got, err := cat.MatchTags(ctx, "SSNI-001.mp4"); err != nil {
 		t.Fatalf("match default AV: %v", err)
@@ -1610,8 +1523,8 @@ func TestMigrateCollapsesAVCodeTagsIntoAV(t *testing.T) {
 	for _, tag := range tags {
 		if tag.Label == "AV" {
 			sawAV = true
-			if tag.Source != "builtin" {
-				t.Fatalf("AV source = %q, want builtin", tag.Source)
+			if tag.Source != "user" {
+				t.Fatalf("AV source = %q, want user", tag.Source)
 			}
 		}
 		if tag.Label != "AV" && isAVCodePollutedLabel(tag.Label) {
@@ -2262,14 +2175,14 @@ func TestDeleteVideoPrunesLegacyOrphanCollectionTag(t *testing.T) {
 		t.Fatalf("user tag count = %d, want 1 (user-source orphans must be preserved)", userCount)
 	}
 
-	// 当前内置标签即使零引用也不能被孤儿清理影响。
+	// 内置标签已彻底移除，确认库内无任何 builtin 标签。
 	var builtinCount int
 	if err := cat.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tags WHERE label = '奶子' AND source = 'builtin'`).Scan(&builtinCount); err != nil {
+		`SELECT COUNT(*) FROM tags WHERE source = 'builtin'`).Scan(&builtinCount); err != nil {
 		t.Fatalf("count builtin tag: %v", err)
 	}
-	if builtinCount != 1 {
-		t.Fatalf("builtin tag count = %d, want 1", builtinCount)
+	if builtinCount != 0 {
+		t.Fatalf("builtin tag count = %d, want 0", builtinCount)
 	}
 }
 
@@ -2322,71 +2235,64 @@ func TestMigrateKeepsUserTagsAndRemovesOrdinaryGeneratedSources(t *testing.T) {
 	}
 }
 
-func TestMigrateKeepsOnlyCurrentBuiltinLabels(t *testing.T) {
+func TestMigrateRemovesAllBuiltinLabels(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/catalog.db"
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	if _, err := db.Exec(schemaSQL); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO tags (id, label, source, created_at, updated_at)
+VALUES
+	(1, '臀', 'builtin', ?, ?),
+	(2, '丝袜', 'builtin', ?, ?)`,
+		now, now, now, now); err != nil {
+		t.Fatalf("seed old builtin tags: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO videos (id, drive_id, file_id, title, tags, tags_manual, published_at, created_at, updated_at)
+VALUES ('video-butt', 'drive', 'file-butt', '蜜桃臀', '["臀"]', 0, ?, ?, ?)`,
+		now, now, now); err != nil {
+		t.Fatalf("seed video: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO video_tags (video_id, tag_id, source, evidence, created_at)
+VALUES ('video-butt', 1, 'auto', '', ?)`, now); err != nil {
+		t.Fatalf("seed video tags: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
 	cat, err := Open(path)
 	if err != nil {
-		t.Fatalf("open catalog: %v", err)
+		t.Fatalf("open migrated catalog: %v", err)
 	}
-	now := time.Now()
-	if err := cat.UpsertVideo(ctx, &Video{
-		ID:          "video-butt",
-		DriveID:     "drive",
-		FileID:      "file-butt",
-		Title:       "蜜桃臀",
-		Tags:        []string{"臀"},
-		PublishedAt: now,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}); err != nil {
-		t.Fatalf("seed old builtin video: %v", err)
-	}
-	if _, err := cat.db.ExecContext(ctx, `UPDATE tags SET source = 'builtin' WHERE label = '臀'`); err != nil {
-		t.Fatalf("mark old butt tag builtin: %v", err)
-	}
-	if _, err := cat.db.ExecContext(ctx,
-		`INSERT INTO tags (label, source, created_at, updated_at) VALUES ('丝袜', 'builtin', ?, ?)`,
-		time.Now().UnixMilli(), time.Now().UnixMilli()); err != nil {
-		t.Fatalf("seed retired builtin: %v", err)
-	}
-	if err := cat.Close(); err != nil {
-		t.Fatalf("close catalog: %v", err)
-	}
+	t.Cleanup(func() { _ = cat.Close() })
 
-	reopened, err := Open(path)
-	if err != nil {
-		t.Fatalf("reopen catalog: %v", err)
+	var builtinCount int
+	if err := cat.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tags WHERE source = 'builtin'`).Scan(&builtinCount); err != nil {
+		t.Fatalf("count builtins: %v", err)
 	}
-	t.Cleanup(func() { _ = reopened.Close() })
-
-	var badBuiltinCount int
-	if err := reopened.db.QueryRowContext(ctx, `
-SELECT COUNT(*)
-  FROM tags
- WHERE source = 'builtin'
-   AND label COLLATE NOCASE NOT IN ('AV', '奶子', '女大', '人妻', '后入', '制服', '美臀', '口交')`).Scan(&badBuiltinCount); err != nil {
-		t.Fatalf("count retired builtins: %v", err)
+	if builtinCount != 0 {
+		t.Fatalf("builtin count = %d, want 0", builtinCount)
 	}
-	if badBuiltinCount != 0 {
-		t.Fatalf("retired builtin count = %d, want 0", badBuiltinCount)
+	for _, label := range []string{"臀", "丝袜"} {
+		if _, err := cat.getTagByLabel(ctx, label); !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("old tag %s still exists: %v", label, err)
+		}
 	}
-	if _, err := reopened.getTagByLabel(ctx, "臀"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("old 臀 tag still exists: %v", err)
-	}
-	tag := mustTagByLabel(t, ctx, reopened, "美臀")
-	if tag.Source != "builtin" {
-		t.Fatalf("美臀 source = %q, want builtin", tag.Source)
-	}
-	if _, err := reopened.getTagByLabel(ctx, "丝袜"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("retired builtin tag still exists: %v", err)
-	}
-	video, err := reopened.GetVideo(ctx, "video-butt")
+	video, err := cat.GetVideo(ctx, "video-butt")
 	if err != nil {
 		t.Fatalf("get migrated video: %v", err)
 	}
-	if !sameStrings(video.Tags, []string{"美臀"}) {
-		t.Fatalf("video tags = %#v, want 美臀", video.Tags)
+	if len(video.Tags) != 0 {
+		t.Fatalf("video tags = %#v, want empty", video.Tags)
 	}
 }
 

@@ -88,8 +88,8 @@ func TestConfigSavePersistsAndHotUpdatesRuntimeSettings(t *testing.T) {
 	if err != nil || enabled {
 		t.Fatalf("catalog built-in setting = %v, %v; want disabled", enabled, err)
 	}
-	if tagCacheInvalidations != 1 {
-		t.Fatalf("tag cache invalidations = %d, want 1", tagCacheInvalidations)
+	if tagCacheInvalidations != 0 {
+		t.Fatalf("tag cache invalidations = %d, want 0", tagCacheInvalidations)
 	}
 	reloaded, err := config.NewManager(path)
 	if err != nil {

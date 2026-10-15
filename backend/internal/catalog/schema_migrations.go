@@ -84,6 +84,78 @@ func (c *Catalog) runOrderedMigrations(ctx context.Context) error {
 				return err
 			},
 		},
+		{
+			Version:     "20260401_0004_remove_all_builtin_tags",
+			Description: "Purge all builtin tags, disassociate video_tags, and resync affected videos",
+			Run: func(ctx context.Context, c *Catalog) error {
+				tx, err := c.db.BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				defer tx.Rollback()
+
+				rows, err := tx.QueryContext(ctx, `
+					SELECT DISTINCT vt.video_id
+					  FROM video_tags vt
+					  JOIN tags t ON t.id = vt.tag_id
+					 WHERE lower(trim(COALESCE(t.source, ''))) = 'builtin'
+				`)
+				if err != nil {
+					return err
+				}
+				var videoIDs []string
+				for rows.Next() {
+					var vid string
+					if err := rows.Scan(&vid); err != nil {
+						rows.Close()
+						return err
+					}
+					videoIDs = append(videoIDs, vid)
+				}
+				if err := rows.Err(); err != nil {
+					rows.Close()
+					return err
+				}
+				rows.Close()
+
+				if _, err := tx.ExecContext(ctx, `
+					DELETE FROM video_tags
+					 WHERE tag_id IN (
+					     SELECT id FROM tags WHERE lower(trim(COALESCE(source, ''))) = 'builtin'
+					 )
+				`); err != nil {
+					return err
+				}
+
+				if _, err := tx.ExecContext(ctx, `
+					DELETE FROM tags WHERE lower(trim(COALESCE(source, ''))) = 'builtin'
+				`); err != nil {
+					return err
+				}
+
+				if _, err := tx.ExecContext(ctx, `
+					DELETE FROM settings WHERE key IN (
+					    'tags.builtin_pack_enabled',
+					    'tags.builtin_pack_initialized_v1'
+					)
+				`); err != nil {
+					return err
+				}
+
+				if err := tx.Commit(); err != nil {
+					return err
+				}
+
+				for _, vid := range uniqueStrings(videoIDs) {
+					manual := c.hasManualTags(ctx, vid)
+					if err := c.syncVideoTagsJSON(ctx, vid, manual); err != nil {
+						return err
+					}
+				}
+
+				return c.bumpTagRulesVersion(ctx)
+			},
+		},
 	}
 
 	for _, m := range migrations {
