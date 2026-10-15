@@ -261,6 +261,7 @@ func (s *Server) RegisterRoutes(r chi.Router, a *auth.Authenticator) {
 		r.Get("/api/list", s.handleList)
 		r.Get("/api/feed", s.handleVideoFeed)
 		r.Get("/api/video/{id}", s.handleVideoDetail)
+		r.Get("/api/video/{id}/source", s.handleVideoSource)
 		r.Get("/api/video/{id}/recommendations", s.handleVideoRecommendations)
 		r.Get("/api/video/{id}/collection/summary", s.handleVideoCollectionSummary)
 		r.Get("/api/video/{id}/collection", s.handleVideoCollection)
@@ -482,6 +483,21 @@ func (s *Server) handleVideoDetail(w http.ResponseWriter, r *http.Request) {
 	// Reactions and editable metadata must stay fresh across detail navigations.
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, detail)
+}
+
+func (s *Server) handleVideoSource(w http.ResponseWriter, r *http.Request) {
+	id := routeParam(r, "id")
+	v, err := s.availableVideo(r.Context(), id)
+	if err != nil {
+		writeCatalogLookupError(w, r, err)
+		return
+	}
+	src := s.videoSource(v)
+	if src == "" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, src, http.StatusTemporaryRedirect)
 }
 
 func (s *Server) handleVideoRecommendations(w http.ResponseWriter, r *http.Request) {
@@ -1627,7 +1643,14 @@ func previewURLFor(videoID string, updatedAt time.Time) string {
 }
 
 func thumbnailURL(v *catalog.Video) string {
-	return thumbnailURLFor(v.ID, v.ThumbnailURL, v.ThumbnailUpdatedAt)
+	if v == nil {
+		return ""
+	}
+	url := thumbnailURLFor(v.ID, v.ThumbnailURL, v.ThumbnailUpdatedAt)
+	if url == "" && isImageExt(v.Ext) {
+		return "/api/video/" + pathSegment(v.ID) + "/source"
+	}
+	return url
 }
 
 func thumbnailURLFor(videoID, thumbnail string, updatedAt time.Time) string {

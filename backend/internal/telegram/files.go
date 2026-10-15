@@ -13,6 +13,7 @@ import (
 
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/drives/telegramstorage"
+	"github.com/video-site/backend/internal/mediaasset"
 	"github.com/video-site/backend/internal/mediaimport"
 	"github.com/video-site/backend/internal/persistence"
 	"github.com/video-site/backend/internal/videoname"
@@ -286,11 +287,25 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 
 					storedName := videoname.UploadFileName(extraTitle, extraExt, extraFileID, false)
 					previewStatus := "pending"
-					if isImageExtension(extraExt) {
+					thumbnailURL := ""
+					extraVideoID := telegramstorage.DriveID + "-" + extraFileID
+
+					if isImageExtension(extraExt) || extra.IsPhoto {
 						previewStatus = "disabled"
+						previewDir := filepath.Join(filepath.Dir(s.cfg.LocalFilesRoot), "previews")
+						thumbDst := mediaasset.ThumbnailPath(previewDir, extraVideoID)
+						if err := os.MkdirAll(filepath.Dir(thumbDst), 0755); err == nil {
+							if linkErr := os.Link(extraDest, thumbDst); linkErr != nil {
+								if data, readErr := os.ReadFile(extraDest); readErr == nil {
+									_ = os.WriteFile(thumbDst, data, 0644)
+								}
+							}
+							if _, statErr := os.Stat(thumbDst); statErr == nil {
+								thumbnailURL = "/p/thumb/" + extraVideoID
+							}
+						}
 					}
 					now := time.Now()
-					extraVideoID := telegramstorage.DriveID + "-" + extraFileID
 					extraVideo := &catalog.Video{
 						ID:              extraVideoID,
 						DriveID:         telegramstorage.DriveID,
@@ -301,6 +316,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 						Size:            extra.Size,
 						Ext:             strings.TrimPrefix(extraExt, "."),
 						PreviewStatus:   previewStatus,
+						ThumbnailURL:    thumbnailURL,
 						DurationSeconds: 0,
 						PublishedAt:     now,
 						CreatedAt:       now,

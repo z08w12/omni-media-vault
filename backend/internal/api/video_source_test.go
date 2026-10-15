@@ -77,3 +77,22 @@ func TestPlaybackSourceLabelsFollowLocalAndMigratedStorage(t *testing.T) {
 		check("本地存储", "/p/stream/cloud/remote-"+id)
 	}
 }
+
+func TestHandleVideoSourceRedirectsToStreamURL(t *testing.T) {
+	ctx := context.Background()
+	c := openRemoteUploadAPICatalog(t)
+	s := &Server{Catalog: c}
+	id := "test-source-video"
+	v := &catalog.Video{ID: id, DriveID: localUploadDriveID, FileID: id + ".jpg", FileName: id + ".jpg", Title: id, Ext: "jpg"}
+	if err := c.UpsertVideo(ctx, v); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.handleVideoSource(w, requestWithVideoID(http.MethodGet, "/api/video/"+id+"/source", id, strings.NewReader("")))
+	if w.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("code = %d, want 307", w.Code)
+	}
+	if loc := w.Header().Get("Location"); !strings.Contains(loc, "/p/upload/") && !strings.Contains(loc, "/p/stream/") {
+		t.Fatalf("location = %q, want stream or upload URL", loc)
+	}
+}
