@@ -62,17 +62,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
   }, [items]);
 
   const handleOpenAlbum = (album: TagAlbum) => {
-    const albumSlides: PhotoSlide[] = album.photos.map((p) => {
-      const src = p.thumbnail || p.previewSrc || `/api/video/${p.id}/source`;
-      const downloadUrl = `/api/video/${p.id}/source`;
-      return {
-        src,
-        title: p.title,
-        downloadUrl,
-        id: p.id,
-      };
-    });
-    onOpenLightbox(albumSlides, 0);
+    onSelectTag(album.tag);
   };
 
   const handleOpenSinglePhoto = (_photo: VideoItem, index: number) => {
@@ -90,9 +80,36 @@ export const MobilePhotosView = memo(function MobilePhotosView({
             </h1>
             <p style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.45)", margin: 0 }}>
               {displayMode === "albums" && !tag
-                ? `${albums.length} 个标签相册 · ${items.length} 张图片`
+                ? `${albums.length} 个主题相册`
                 : `${items.length} 张图片`}
             </p>
+
+            {tag && (
+              <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => onSelectTag("")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    borderRadius: "6px",
+                    padding: "4px 10px",
+                    color: "#38bdf8",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  ← 返回相册
+                </button>
+                <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.6)" }}>
+                  #{tag}
+                </span>
+              </div>
+            )}
           </div>
 
           <SearchPanel navigationPath="/photos" />

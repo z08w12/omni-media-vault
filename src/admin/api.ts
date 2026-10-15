@@ -846,6 +846,17 @@ export function updateVideo(id: string, body: UpdateVideoInput) {
   });
 }
 
+export function batchUpdateVideoTags(input: {
+  ids: string[];
+  action: "add" | "replace" | "remove";
+  tags: string[];
+}) {
+  return request<{ ok: boolean; updated: number }>("/videos/batch-tags", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function deleteVideo(id: string, options: { deleteSource?: boolean } = {}) {
   return request<{ ok: boolean; deletedSource: boolean }>(
     `/videos/${encodeURIComponent(id)}`,

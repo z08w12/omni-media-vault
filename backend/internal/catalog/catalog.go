@@ -197,6 +197,7 @@ type VideoSummary struct {
 	PreviewUpdatedAt   time.Time
 	Views              int
 	Badges             []string
+	Tags               []string
 	PublishedAt        time.Time
 }
 
@@ -2732,7 +2733,14 @@ func buildVideoListQuery(p ListParams) videoListQuery {
 			args = append(args, p.DurationSecondsMax)
 		}
 	}
-	if p.Tag != "" {
+	if p.Tag == "未分类" || p.Tag == "__uncategorized__" {
+		where = append(where, `NOT EXISTS (
+			SELECT 1 FROM video_tags vt
+			JOIN tags tag_filter ON tag_filter.id = vt.tag_id
+			WHERE vt.video_id = videos.id
+			  AND LOWER(TRIM(tag_filter.label)) NOT IN ('图片', 'tg', 'telegram', 'x', 'twitter', 'youtube', 'douyin', 'tiktok', 'bilibili', 'web')
+		)`)
+	} else if p.Tag != "" {
 		where = append(where, videoMatchesTagLabelSQL("videos"))
 		args = append(args, p.Tag)
 	}
@@ -2962,7 +2970,8 @@ const videoSummaryCols = `
 videos.id, videos.title, COALESCE(videos.author, ''),
 COALESCE(videos.duration_seconds, 0), COALESCE(videos.thumbnail_url, ''),
 COALESCE(videos.thumbnail_updated_at, 0), COALESCE(videos.preview_updated_at, 0),
-COALESCE(videos.views, 0), COALESCE(videos.badges, '[]'), videos.published_at
+COALESCE(videos.views, 0), COALESCE(videos.badges, '[]'), videos.published_at,
+COALESCE(videos.tags, '[]')
 `
 
 // ListRecommendationCandidates loads one small, latest-first candidate window
@@ -4254,7 +4263,7 @@ type rowScanner interface {
 func scanVideoSummary(row rowScanner) (*VideoSummary, error) {
 	video := &VideoSummary{}
 	var thumbnailUpdatedAt, previewUpdatedAt, publishedAt int64
-	var badgesJSON string
+	var badgesJSON, tagsJSON string
 	if err := row.Scan(
 		&video.ID,
 		&video.Title,
@@ -4266,10 +4275,12 @@ func scanVideoSummary(row rowScanner) (*VideoSummary, error) {
 		&video.Views,
 		&badgesJSON,
 		&publishedAt,
+		&tagsJSON,
 	); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(badgesJSON), &video.Badges)
+	_ = json.Unmarshal([]byte(tagsJSON), &video.Tags)
 	if thumbnailUpdatedAt > 0 {
 		video.ThumbnailUpdatedAt = time.UnixMilli(thumbnailUpdatedAt)
 	}

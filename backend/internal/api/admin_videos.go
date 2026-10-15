@@ -157,6 +157,44 @@ func (a *AdminServer) handleUpdateVideo(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, mapAdminVideo(v))
 }
 
+type batchUpdateVideoTagsReq struct {
+	IDs    []string `json:"ids"`
+	Action string   `json:"action"` // "add" | "replace" | "remove"
+	Tags   []string `json:"tags"`
+}
+
+type batchUpdateVideoTagsResp struct {
+	OK      bool `json:"ok"`
+	Updated int  `json:"updated"`
+}
+
+func (a *AdminServer) handleBatchUpdateVideoTags(w http.ResponseWriter, r *http.Request) {
+	var body batchUpdateVideoTagsReq
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if len(body.IDs) == 0 {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请选择至少一个媒体"))
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(body.Action))
+	if action == "" {
+		action = "add"
+	}
+	if len(body.Tags) == 0 && action != "replace" {
+		writeErr(w, r, http.StatusBadRequest, errors.New("请指定至少一个标签"))
+		return
+	}
+
+	updatedCount, err := a.Catalog.BatchUpdateVideoTags(r.Context(), body.IDs, action, body.Tags)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, batchUpdateVideoTagsResp{OK: true, Updated: updatedCount})
+}
+
 func (a *AdminServer) handleDeleteVideo(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {

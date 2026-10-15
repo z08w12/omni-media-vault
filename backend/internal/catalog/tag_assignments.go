@@ -782,3 +782,64 @@ func scanTag(row tagRowScanner) (Tag, error) {
 	_ = json.Unmarshal([]byte(rulesJSON), &tag.MatchRules)
 	return tag, nil
 }
+
+// BatchUpdateVideoTags applies tag changes to multiple videos in bulk.
+// action can be: "add" (union with existing tags), "replace" (overwrite), or "remove" (subtract).
+func (c *Catalog) BatchUpdateVideoTags(ctx context.Context, videoIDs []string, action string, inputLabels []string) (int, error) {
+	if len(videoIDs) == 0 {
+		return 0, nil
+	}
+	cleanInput := uniqueStrings(cleanLabels(inputLabels))
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action == "" {
+		action = "add"
+	}
+
+	updatedCount := 0
+	for _, videoID := range videoIDs {
+		v, err := c.GetVideo(ctx, videoID)
+		if err != nil {
+			continue
+		}
+		var targetTags []string
+		switch action {
+		case "replace":
+			targetTags = cleanInput
+		case "remove":
+			removeSet := make(map[string]bool, len(cleanInput))
+			for _, l := range cleanInput {
+				removeSet[strings.ToLower(l)] = true
+			}
+			for _, existing := range v.Tags {
+				if !removeSet[strings.ToLower(strings.TrimSpace(existing))] {
+					targetTags = append(targetTags, existing)
+				}
+			}
+		case "add":
+			fallthrough
+		default:
+			seen := make(map[string]bool)
+			for _, existing := range v.Tags {
+				k := strings.ToLower(strings.TrimSpace(existing))
+				if k != "" && !seen[k] {
+					seen[k] = true
+					targetTags = append(targetTags, existing)
+				}
+			}
+			for _, newTag := range cleanInput {
+				k := strings.ToLower(strings.TrimSpace(newTag))
+				if k != "" && !seen[k] {
+					seen[k] = true
+					targetTags = append(targetTags, newTag)
+				}
+			}
+		}
+
+		if err := c.replaceManualVideoTags(ctx, videoID, targetTags, true); err != nil {
+			return updatedCount, err
+		}
+		updatedCount++
+	}
+	return updatedCount, nil
+}
+

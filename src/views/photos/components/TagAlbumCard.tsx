@@ -73,7 +73,7 @@ export const TagAlbumCard = memo(function TagAlbumCard({
 
         <div className="tag-album-meta">
           <span>共 {album.count} 张照片</span>
-          {onSelectTag && album.tag !== "未分类" && (
+          {onSelectTag && (
             <span
               onClick={(e) => {
                 e.stopPropagation();
@@ -85,7 +85,7 @@ export const TagAlbumCard = memo(function TagAlbumCard({
                 textDecoration: "underline",
               }}
             >
-              浏览流
+              进入相册 →
             </span>
           )}
         </div>

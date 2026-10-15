@@ -64,17 +64,7 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
   }, [items]);
 
   const handleOpenAlbum = (album: TagAlbum) => {
-    const albumSlides: PhotoSlide[] = album.photos.map((p) => {
-      const src = p.thumbnail || p.previewSrc || `/api/video/${p.id}/source`;
-      const downloadUrl = `/api/video/${p.id}/source`;
-      return {
-        src,
-        title: p.title,
-        downloadUrl,
-        id: p.id,
-      };
-    });
-    onOpenLightbox(albumSlides, 0);
+    onSelectTag(album.tag);
   };
 
   const handleOpenSinglePhoto = (_photo: VideoItem, index: number) => {
@@ -90,11 +80,11 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
           <div className="photos-header">
             <div className="photos-header__title-row">
               <h1 style={{ fontSize: "24px", fontWeight: "700", color: "#f8fafc", margin: 0 }}>
-                {tag ? `#${tag} 图集` : "高清相册与图集专区"}
+                {tag ? `#${tag} 相册` : "高清相册与图集专区"}
               </h1>
               <span className="photos-header__count">
                 {displayMode === "albums" && !tag
-                  ? `共 ${albums.length} 个标签相册 · ${items.length} 张照片`
+                  ? `共 ${albums.length} 个主题相册`
                   : `共 ${items.length} 张照片`}
               </span>
             </div>
@@ -102,6 +92,33 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
             <p className="photos-header__desc">
               私有高清照片相册归档 · 基于标签主题聚合 · 支持无损原图缩放与下载
             </p>
+
+            {tag && (
+              <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => onSelectTag("")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    color: "#38bdf8",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  ← 返回全部相册
+                </button>
+                <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)" }}>
+                  当前相册：<strong style={{ color: "#fff" }}>#{tag}</strong>
+                </span>
+              </div>
+            )}
           </div>
 
           <SearchPanel navigationPath="/photos" />

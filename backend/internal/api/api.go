@@ -160,6 +160,7 @@ type VideoCardDTO struct {
 	PreviewStrategy string   `json:"previewStrategy"`
 	Duration        string   `json:"duration"`
 	Badges          []string `json:"badges"`
+	Tags            []string `json:"tags,omitempty"`
 	Author          string   `json:"author"`
 	Views           int      `json:"views"`
 	PublishedAt     string   `json:"publishedAt"`
@@ -271,6 +272,7 @@ func (s *Server) RegisterRoutes(r chi.Router, a *auth.Authenticator) {
 		r.Post("/api/video/{id}/view", s.handleView)
 		r.Get("/api/tags", s.handleTags)
 		r.Get("/api/shorts/next", s.handleShortsNext)
+		r.Get("/api/photos/albums", s.handlePhotoAlbums)
 
 		// 代理路由同样需要鉴权，防止绕过
 		r.Get("/p/stream/{driveID}/*", s.handleStream)
@@ -1924,6 +1926,10 @@ func mapVideoSummaries(videos []*catalog.VideoSummary) []VideoCardDTO {
 		if badges == nil {
 			badges = []string{}
 		}
+		tags := video.Tags
+		if tags == nil {
+			tags = []string{}
+		}
 		out = append(out, VideoCardDTO{
 			ID:              video.ID,
 			Href:            "/video/" + pathSegment(video.ID),
@@ -1934,6 +1940,7 @@ func mapVideoSummaries(videos []*catalog.VideoSummary) []VideoCardDTO {
 			PreviewStrategy: "teaser-file",
 			Duration:        formatDuration(video.DurationSeconds),
 			Badges:          badges,
+			Tags:            tags,
 			Author:          video.Author,
 			Views:           video.Views,
 			PublishedAt:     video.PublishedAt.Format("2006-01-02"),

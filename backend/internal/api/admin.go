@@ -228,6 +228,7 @@ func (a *AdminServer) Register(r chi.Router) {
 			r.Get("/videos", a.handleAdminListVideos)
 			r.Get("/videos/stats", a.handleVideoStats)
 			r.Put("/videos/{id}", a.handleUpdateVideo)
+			r.Post("/videos/batch-tags", a.handleBatchUpdateVideoTags)
 			r.Delete("/videos/{id}", a.handleDeleteVideo)
 			r.Post("/videos/regen-preview", a.handleRegenAllPreviews)
 			r.Post("/videos/{id}/regen-preview", a.handleRegenPreview)

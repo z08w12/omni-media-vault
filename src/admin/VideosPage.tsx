@@ -395,6 +395,7 @@ function CurrentVideosTab({
   const [editing, setEditing] = useState<api.AdminVideo | null>(null);
   const [availableTags, setAvailableTags] = useState<api.AdminTag[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchDeleteSource, setBatchDeleteSource] = useState(false);
@@ -641,6 +642,26 @@ function CurrentVideosTab({
     if (selectedIds.size === 0) return;
     setBatchDeleteSource(false);
     setBatchDeleteOpen(true);
+  }
+
+  async function handleConfirmBatchTag(action: "add" | "replace" | "remove", tags: string[]) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const result = await api.batchUpdateVideoTags({
+        ids,
+        action,
+        tags,
+      });
+      show(`批量设置标签成功，已更新 ${result.updated} 个媒体`, "success");
+      setSelectedIds(new Set());
+      setBatchTagOpen(false);
+      refresh();
+      void api.listTags().then((tagList) => setAvailableTags(tagList ?? [])).catch(() => undefined);
+    } catch (e) {
+      show(e instanceof Error ? e.message : "批量设置标签失败", "error");
+      throw e;
+    }
   }
 
   function trackRegeneratingPreview(videos: api.AdminVideo[]) {
@@ -911,6 +932,14 @@ function CurrentVideosTab({
             <button
               type="button"
               className="admin-btn admin-videos-bulk-actions__btn"
+              onClick={() => setBatchTagOpen(true)}
+              disabled={selectedIds.size === 0}
+            >
+              批量打标签
+            </button>
+            <button
+              type="button"
+              className="admin-btn admin-videos-bulk-actions__btn"
               onClick={handleBatchDelete}
               disabled={selectedIds.size === 0}
             >
@@ -1042,6 +1071,13 @@ function CurrentVideosTab({
       >
         <DeleteSourceOption checked={batchDeleteSource} disabled={batchDeleting} onChange={setBatchDeleteSource} />
       </ConfirmModal>
+      <BatchTagModal
+        open={batchTagOpen}
+        selectedCount={selectedIds.size}
+        availableTags={availableTags}
+        onClose={() => setBatchTagOpen(false)}
+        onBatchTag={handleConfirmBatchTag}
+      />
     </div>
   );
 }
@@ -1944,6 +1980,280 @@ function useVideosPageSize(desktopPageSize: number, mobilePageSize: number) {
   }, [desktopPageSize, mobilePageSize]);
 
   return pageSize;
+}
+
+function BatchTagModal({
+  open,
+  selectedCount,
+  availableTags,
+  onClose,
+  onBatchTag,
+}: {
+  open: boolean;
+  selectedCount: number;
+  availableTags: api.AdminTag[];
+  onClose: () => void;
+  onBatchTag: (action: "add" | "replace" | "remove", tags: string[]) => Promise<void>;
+}) {
+  const [action, setAction] = useState<"add" | "replace" | "remove">("add");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { show } = useToast();
+
+  const handleAddCustomTag = () => {
+    const raw = customTagInput.trim();
+    if (!raw) return;
+    const parts = raw
+      .split(/[,，\s]+/)
+      .map((s) => s.trim().replace(/^#/, ""))
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    setSelectedTags((prev) => Array.from(new Set([...prev, ...parts])));
+    setCustomTagInput("");
+  };
+
+  const handleToggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleSubmit = async () => {
+    if (selectedTags.length === 0 && action !== "replace") {
+      show("请选择或输入至少一个标签", "error");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onBatchTag(action, selectedTags);
+      onClose();
+    } catch {
+      // Toast already shown in parent
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Modal
+      open
+      title={`批量设置标签 (已选择 ${selectedCount} 项)`}
+      ariaLabel="批量设置标签"
+      className="admin-modal--video-edit"
+      onClose={onClose}
+      footer={
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", width: "100%" }}>
+          <button type="button" className="admin-btn" onClick={onClose} disabled={submitting}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="admin-btn is-primary"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? "处理中..." : "确认应用"}
+          </button>
+        </div>
+      }
+    >
+      <div className="admin-form" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "14px" }}>
+            操作模式
+          </label>
+          <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
+            <label className="admin-check" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="radio"
+                name="batch-tag-action"
+                checked={action === "add"}
+                onChange={() => setAction("add")}
+              />
+              <span>追加标签 (推荐，保留已有标签)</span>
+            </label>
+            <label className="admin-check" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="radio"
+                name="batch-tag-action"
+                checked={action === "replace"}
+                onChange={() => setAction("replace")}
+              />
+              <span>覆盖标签 (完全替换)</span>
+            </label>
+            <label className="admin-check" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="radio"
+                name="batch-tag-action"
+                checked={action === "remove"}
+                onChange={() => setAction("remove")}
+              />
+              <span>移除标签 (从已有标签中删除)</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: 600, fontSize: "14px" }}>
+            已选标签 ({selectedTags.length})
+          </label>
+          <div
+            style={{
+              minHeight: "44px",
+              padding: "8px 12px",
+              background: "rgba(0, 0, 0, 0.25)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: "8px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            {selectedTags.length === 0 ? (
+              <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)" }}>
+                {action === "replace"
+                  ? "未选任何标签（确认应用后将清空所选媒体的全部标签）"
+                  : `请在下方输入或点击勾选要${action === "remove" ? "移除" : "添加"}的标签`}
+              </span>
+            ) : (
+              selectedTags.map((tag) => (
+                <span
+                  key={tag}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background:
+                      action === "remove"
+                        ? "rgba(239, 68, 68, 0.2)"
+                        : "rgba(56, 189, 248, 0.2)",
+                    border: `1px solid ${
+                      action === "remove"
+                        ? "rgba(239, 68, 68, 0.4)"
+                        : "rgba(56, 189, 248, 0.4)"
+                    }`,
+                    color: action === "remove" ? "#fca5a5" : "#38bdf8",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                  }}
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTag(tag)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      padding: "0 2px",
+                      fontSize: "14px",
+                      lineHeight: 1,
+                    }}
+                    title="移除"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "rgba(255, 255, 255, 0.7)" }}>
+            快捷输入新标签 (回车或点击添加)
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              placeholder="输入标签名，如: 空心柚七、街拍（多个可用逗号隔开）"
+              value={customTagInput}
+              onChange={(e) => setCustomTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddCustomTag();
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: "6px",
+                color: "#fff",
+                fontSize: "13px",
+              }}
+            />
+            <button
+              type="button"
+              className="admin-btn"
+              onClick={handleAddCustomTag}
+              disabled={!customTagInput.trim()}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              添加标签
+            </button>
+          </div>
+        </div>
+
+        {availableTags.length > 0 && (
+          <div>
+            <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "rgba(255, 255, 255, 0.7)" }}>
+              从现有标签池快速选择
+            </label>
+            <div
+              style={{
+                maxHeight: "180px",
+                overflowY: "auto",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                padding: "8px",
+                background: "rgba(0, 0, 0, 0.15)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "6px",
+              }}
+            >
+              {availableTags.map((tag) => {
+                const checked = selectedTags.includes(tag.label);
+                return (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    onClick={() => handleToggleTag(tag.label)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      border: checked
+                        ? "1px solid #38bdf8"
+                        : "1px solid rgba(255, 255, 255, 0.12)",
+                      background: checked
+                        ? "rgba(56, 189, 248, 0.2)"
+                        : "rgba(255, 255, 255, 0.04)",
+                      color: checked ? "#38bdf8" : "rgba(255, 255, 255, 0.8)",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    #{tag.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
 }
 
 function EditVideoModal({

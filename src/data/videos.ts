@@ -886,3 +886,19 @@ async function responseError(res: Response): Promise<Error> {
   }
   return new Error(`HTTP ${res.status}`);
 }
+
+export type ServerPhotoAlbum = {
+  tag: string;
+  title: string;
+  count: number;
+  coverPhoto?: VideoItem;
+  samplePhotos: VideoItem[];
+  latestTimestamp: number;
+};
+
+export async function fetchPhotoAlbums(): Promise<ServerPhotoAlbum[]> {
+  const res = await apiGet<ServerPhotoAlbum[]>("/api/photos/albums");
+  if (!Array.isArray(res)) return [];
+  return res;
+}
+
