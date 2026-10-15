@@ -416,7 +416,7 @@ function RecommendedItemContent(
   }, [previewEnabled, video.id]);
   const inView = useInViewport(rootRef);
 
-  const isImage = video.duration === "图片";
+  const isImage = ("mediaKind" in video && video.mediaKind === "image") || video.duration === "图片";
   const {
     touchPreviewArmedRef,
     clearPreviewIntentTimer,

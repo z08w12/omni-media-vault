@@ -33,6 +33,23 @@ type Catalog struct {
 	// tagMaintenanceMu serializes rule edits with full-library maintenance so a
 	// matcher built from an older rule set cannot overwrite a just-edited tag.
 	tagMaintenanceMu sync.Mutex
+
+	photoAlbumsMu      sync.RWMutex
+	photoAlbumsVersion uint64
+	photoAlbumsCache   []PhotoAlbum
+	photoAlbumsUntil   time.Time
+}
+
+// InvalidatePhotoAlbumsCache invalidates any cached photo album aggregations.
+func (c *Catalog) InvalidatePhotoAlbumsCache() {
+	if c == nil {
+		return
+	}
+	c.photoAlbumsMu.Lock()
+	c.photoAlbumsVersion++
+	c.photoAlbumsCache = nil
+	c.photoAlbumsUntil = time.Time{}
+	c.photoAlbumsMu.Unlock()
 }
 
 // WriteBarrier owns a database connection with a BEGIN IMMEDIATE transaction.
@@ -66,6 +83,10 @@ func Open(path string) (*Catalog, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 	c := &Catalog{db: db}
+	if err := c.runOrderedMigrations(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("run schema migrations: %w", err)
+	}
 	if err := c.migrateImports(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate imports: %w", err)
@@ -181,6 +202,10 @@ type Video struct {
 	PublishedAt        time.Time `json:"publishedAt"`
 	CreatedAt          time.Time `json:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt"`
+	MediaKind          string    `json:"mediaKind"`
+	MIMEType           string    `json:"mimeType"`
+	Width              int       `json:"width"`
+	Height             int       `json:"height"`
 }
 
 // VideoSummary is the public card-sized projection of a video. List feeds use
@@ -199,6 +224,9 @@ type VideoSummary struct {
 	Badges             []string
 	Tags               []string
 	PublishedAt        time.Time
+	MediaKind          string
+	Width              int
+	Height             int
 }
 
 // RecommendationCandidateParams describes one bounded recommendation pool.
@@ -224,6 +252,7 @@ type VideoCollectionOrderItem struct {
 }
 
 func (c *Catalog) UpsertVideo(ctx context.Context, v *Video) error {
+	defer c.InvalidatePhotoAlbumsCache()
 	existed := c.videoExists(ctx, v.ID)
 	storedTags, err := upsertVideoRow(ctx, c.db, v)
 	if err != nil {
@@ -296,19 +325,32 @@ func upsertVideoRow(ctx context.Context, exec videoRowExecer, v *Video) ([]strin
 		v.PreviewUpdatedAt = time.Time{}
 	}
 
+	if v.MediaKind == "" {
+		if isImageExt(v.Ext) {
+			v.MediaKind = "image"
+		} else {
+			v.MediaKind = "video"
+		}
+	}
+	if v.MIMEType == "" {
+		v.MIMEType = guessMIMEType(v.Ext, v.MediaKind)
+	}
+
 	_, err := exec.ExecContext(ctx, `
 INSERT INTO videos (
   id, drive_id, file_id, file_name, content_hash, sampled_sha256, fingerprint_status, fingerprint_error, parent_id, ancestor_dir_ids, ancestor_dir_names, dir_name, title, author, tags,
 	  duration_seconds, size_bytes, ext, thumbnail_url, thumbnail_updated_at, thumbnail_status,
 	  preview_file_id, preview_local, preview_updated_at, preview_status,
 	  views, last_viewed_at, favorites, comments, likes, last_liked_at, dislikes,
-	  hidden, badges, description, published_at, created_at, updated_at
+	  hidden, badges, description, published_at, created_at, updated_at,
+	  media_kind, mime_type, width, height
 	) VALUES (
 	  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 	  ?, ?, ?, ?, ?, CASE WHEN COALESCE(?, '') != '' THEN 'ready' ELSE 'pending' END,
 	  ?, ?, ?, ?,
 	  ?, ?, ?, ?, ?, ?, ?,
-	  ?, ?, ?, ?, ?, ?
+	  ?, ?, ?, ?, ?, ?,
+	  ?, ?, ?, ?
 	)
 ON CONFLICT(id) DO UPDATE SET
   file_name       = CASE
@@ -377,7 +419,23 @@ ON CONFLICT(id) DO UPDATE SET
                     END,
 	  badges          = excluded.badges,
 	  description     = excluded.description,
-  updated_at      = excluded.updated_at
+  updated_at      = excluded.updated_at,
+  media_kind      = CASE
+                      WHEN excluded.media_kind != '' THEN excluded.media_kind
+                      ELSE videos.media_kind
+                    END,
+  mime_type       = CASE
+                      WHEN excluded.mime_type != '' THEN excluded.mime_type
+                      ELSE videos.mime_type
+                    END,
+  width           = CASE
+                      WHEN excluded.width > 0 THEN excluded.width
+                      ELSE videos.width
+                    END,
+  height          = CASE
+                      WHEN excluded.height > 0 THEN excluded.height
+                      ELSE videos.height
+                    END
 `,
 		v.ID, v.DriveID, v.FileID, v.FileName, v.ContentHash, v.SampledSHA256, fingerprintStatus, v.FingerprintError, v.ParentID, ancestorDirIDsJSON, ancestorDirNamesJSON, v.DirName, v.Title, v.Author, string(tagsJSON),
 		v.DurationSeconds, v.Size, v.Ext, v.ThumbnailURL, thumbnailUpdatedAt, v.ThumbnailURL,
@@ -385,6 +443,7 @@ ON CONFLICT(id) DO UPDATE SET
 		v.Views, unixMilliOrZero(v.LastViewedAt), v.Favorites, v.Comments, v.Likes, unixMilliOrZero(v.LastLikedAt), v.Dislikes,
 		boolToInt(v.Hidden), string(badgesJSON), v.Description,
 		v.PublishedAt.UnixMilli(), v.CreatedAt.UnixMilli(), v.UpdatedAt.UnixMilli(),
+		v.MediaKind, v.MIMEType, v.Width, v.Height,
 	)
 	if err != nil {
 		return nil, err
@@ -2971,7 +3030,8 @@ videos.id, videos.title, COALESCE(videos.author, ''),
 COALESCE(videos.duration_seconds, 0), COALESCE(videos.thumbnail_url, ''),
 COALESCE(videos.thumbnail_updated_at, 0), COALESCE(videos.preview_updated_at, 0),
 COALESCE(videos.views, 0), COALESCE(videos.badges, '[]'), videos.published_at,
-COALESCE(videos.tags, '[]')
+COALESCE(videos.tags, '[]'),
+COALESCE(videos.media_kind, 'video'), COALESCE(videos.width, 0), COALESCE(videos.height, 0)
 `
 
 // ListRecommendationCandidates loads one small, latest-first candidate window
@@ -4193,8 +4253,52 @@ duration_seconds, size_bytes, COALESCE(ext, ''), COALESCE(thumbnail_url, ''), CO
 COALESCE(preview_file_id, ''), COALESCE(preview_local, ''), COALESCE(preview_updated_at, 0), COALESCE(preview_status, 'pending'),
 	views, COALESCE(last_viewed_at, 0), favorites, comments, likes, COALESCE(last_liked_at, 0), dislikes,
 	COALESCE(hidden, 0), COALESCE(badges, '[]'), COALESCE(description, ''),
-	published_at, created_at, updated_at
+	published_at, created_at, updated_at,
+	COALESCE(media_kind, 'video'), COALESCE(mime_type, ''), COALESCE(width, 0), COALESCE(height, 0)
 	`
+
+func isImageExt(ext string) bool {
+	clean := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ext), "."))
+	switch clean {
+	case "jpg", "jpeg", "png", "webp", "gif", "bmp":
+		return true
+	default:
+		return false
+	}
+}
+
+func guessMIMEType(ext, mediaKind string) string {
+	clean := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(ext), "."))
+	switch clean {
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "png":
+		return "image/png"
+	case "webp":
+		return "image/webp"
+	case "gif":
+		return "image/gif"
+	case "bmp":
+		return "image/bmp"
+	case "mp4":
+		return "video/mp4"
+	case "webm":
+		return "video/webm"
+	case "mkv":
+		return "video/x-matroska"
+	case "mov":
+		return "video/quicktime"
+	case "mp3":
+		return "audio/mpeg"
+	case "m4a":
+		return "audio/mp4"
+	default:
+		if mediaKind == "image" {
+			return "image/jpeg"
+		}
+		return "video/mp4"
+	}
+}
 
 const activeDriveWhereSQL = `(videos.drive_id IN ('local-upload','telegram-local')
 	OR EXISTS (
@@ -4276,6 +4380,9 @@ func scanVideoSummary(row rowScanner) (*VideoSummary, error) {
 		&badgesJSON,
 		&publishedAt,
 		&tagsJSON,
+		&video.MediaKind,
+		&video.Width,
+		&video.Height,
 	); err != nil {
 		return nil, err
 	}
@@ -4305,6 +4412,7 @@ func scanVideo(row rowScanner) (*Video, error) {
 		&v.Views, &lastViewedAt, &v.Favorites, &v.Comments, &v.Likes, &lastLikedAt, &v.Dislikes,
 		&hidden, &badgesJSON, &v.Description,
 		&publishedAt, &createdAt, &updatedAt,
+		&v.MediaKind, &v.MIMEType, &v.Width, &v.Height,
 	)
 	if err != nil {
 		return nil, err
@@ -4332,6 +4440,14 @@ func scanVideo(row rowScanner) (*Video, error) {
 	}
 	if lastLikedAt > 0 {
 		v.LastLikedAt = time.UnixMilli(lastLikedAt)
+	}
+	if v.MediaKind == "" || v.MediaKind == "video" {
+		if isImageExt(v.Ext) {
+			v.MediaKind = "image"
+		}
+	}
+	if v.MIMEType == "" {
+		v.MIMEType = guessMIMEType(v.Ext, v.MediaKind)
 	}
 	return v, nil
 }

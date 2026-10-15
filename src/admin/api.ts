@@ -701,6 +701,10 @@ export type AdminVideo = {
   description: string;
   publishedAt: string;
   updatedAt: string;
+  mediaKind?: "video" | "image" | "audio";
+  mimeType?: string;
+  width?: number;
+  height?: number;
 };
 
 export type AdminVideoList = {

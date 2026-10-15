@@ -54,7 +54,7 @@ export const VideoCard = memo(function VideoCard({
   }, [previewEnabled, video.id]);
   const inView = useInViewport(rootRef);
 
-  const isImage = video.duration === "图片";
+  const isImage = video.mediaKind === "image" || video.duration === "图片";
   const {
     touchPreviewArmedRef,
     clearPreviewIntentTimer,

@@ -2,201 +2,291 @@ package catalog
 
 import (
 	"context"
-	"slices"
+	"database/sql"
+	"fmt"
 	"strings"
+	"time"
 )
 
 type PhotoAlbum struct {
-	Tag             string
-	Title           string
-	Count           int
-	CoverPhoto      *VideoSummary
-	SamplePhotos    []*VideoSummary
-	LatestTimestamp int64
+	Tag             string          `json:"tag"`
+	Title           string          `json:"title"`
+	Count           int             `json:"count"`
+	CoverPhoto      *VideoSummary   `json:"coverPhoto,omitempty"`
+	SamplePhotos    []*VideoSummary `json:"samplePhotos"`
+	LatestTimestamp int64           `json:"latestTimestamp"`
 }
 
-var systemTagsToExclude = map[string]bool{
-	"图片":       true,
-	"tg":       true,
-	"telegram": true,
-	"x":        true,
-	"twitter":  true,
-	"youtube":  true,
-	"douyin":   true,
-	"tiktok":   true,
-	"bilibili": true,
-	"web":      true,
+var systemTagsToExclude = []string{
+	"图片", "tg", "telegram", "x", "twitter", "youtube", "douyin", "tiktok", "bilibili", "web",
 }
 
-func isSystemTag(label string) bool {
-	return systemTagsToExclude[strings.ToLower(strings.TrimSpace(label))]
+const photoAlbumImagePredicate = `(COALESCE(videos.media_kind, '') = 'image' OR LOWER(TRIM(COALESCE(videos.ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'))`
+
+func systemTagsSQLList() string {
+	quoted := make([]string, len(systemTagsToExclude))
+	for i, t := range systemTagsToExclude {
+		quoted[i] = fmt.Sprintf("'%s'", strings.ToLower(t))
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func (c *Catalog) ListPhotoAlbums(ctx context.Context) ([]PhotoAlbum, error) {
-	rows, err := c.db.QueryContext(ctx, `
-		SELECT videos.id, COALESCE(t.label, '')
-		FROM videos
-		LEFT JOIN video_tags vt ON vt.video_id = videos.id
-		LEFT JOIN tags t ON t.id = vt.tag_id
-		WHERE COALESCE(videos.hidden, 0) = 0
-		  AND `+activeDriveWhereSQL+`
-		  AND `+uniqueVideoWhereSQL+`
-		  AND LOWER(TRIM(COALESCE(videos.ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
-		ORDER BY videos.published_at DESC, videos.id ASC
-	`)
-	if err != nil {
-		return nil, err
+	// 1. Read from in-memory cache if valid
+	c.photoAlbumsMu.RLock()
+	if c.photoAlbumsCache != nil && time.Now().Before(c.photoAlbumsUntil) {
+		cached := make([]PhotoAlbum, len(c.photoAlbumsCache))
+		copy(cached, c.photoAlbumsCache)
+		c.photoAlbumsMu.RUnlock()
+		return cached, nil
 	}
-	defer rows.Close()
+	c.photoAlbumsMu.RUnlock()
 
-	var orderedVideoIDs []string
-	seenVideos := make(map[string]bool)
-	videoNonSystemTags := make(map[string][]string)
+	sysTags := systemTagsSQLList()
 
-	for rows.Next() {
-		var vid, tagLabel string
-		if err := rows.Scan(&vid, &tagLabel); err != nil {
+	// 2. Query 1: Tag-level aggregation
+	tagQuery := fmt.Sprintf(`
+		SELECT
+			t.id,
+			TRIM(t.label) AS tag_name,
+			COUNT(DISTINCT videos.id) AS photo_count,
+			MAX(videos.published_at) AS latest_pub
+		FROM video_tags vt
+		JOIN tags t ON t.id = vt.tag_id
+		JOIN videos ON videos.id = vt.video_id
+		WHERE COALESCE(videos.hidden, 0) = 0
+		  AND %s
+		  AND %s
+		  AND %s
+		  AND TRIM(COALESCE(t.label, '')) != ''
+		  AND LOWER(TRIM(t.label)) NOT IN (%s)
+		GROUP BY t.id, t.label
+		ORDER BY photo_count DESC, latest_pub DESC, tag_name ASC
+	`, activeDriveWhereSQL, uniqueVideoWhereSQL, photoAlbumImagePredicate, sysTags)
+
+	tagRows, err := c.db.QueryContext(ctx, tagQuery)
+	if err != nil {
+		return nil, fmt.Errorf("query photo album tags: %w", err)
+	}
+	defer tagRows.Close()
+
+	type tagMeta struct {
+		id        int64
+		label     string
+		count     int
+		latestPub int64
+	}
+	var tagMetas []tagMeta
+	for tagRows.Next() {
+		var tm tagMeta
+		if err := tagRows.Scan(&tm.id, &tm.label, &tm.count, &tm.latestPub); err != nil {
 			return nil, err
 		}
-		if !seenVideos[vid] {
-			seenVideos[vid] = true
-			orderedVideoIDs = append(orderedVideoIDs, vid)
-		}
-		cleanTag := strings.TrimSpace(tagLabel)
-		if cleanTag != "" && !isSystemTag(cleanTag) {
-			videoNonSystemTags[vid] = append(videoNonSystemTags[vid], cleanTag)
-		}
+		tagMetas = append(tagMetas, tm)
 	}
-	if err := rows.Err(); err != nil {
+	if err := tagRows.Err(); err != nil {
 		return nil, err
 	}
 
-	tagToVideoIDs := make(map[string][]string)
-	var uncategorizedIDs []string
-
-	for _, vid := range orderedVideoIDs {
-		tags := videoNonSystemTags[vid]
-		if len(tags) == 0 {
-			uncategorizedIDs = append(uncategorizedIDs, vid)
-		} else {
-			seenTag := make(map[string]bool)
-			for _, t := range tags {
-				if !seenTag[t] {
-					seenTag[t] = true
-					tagToVideoIDs[t] = append(tagToVideoIDs[t], vid)
-				}
-			}
-		}
-	}
-
+	// 3. Query 2: Top-4 sample photo IDs per tag using SQLite window function
+	var allSampleIDs []string
 	sampleIDSet := make(map[string]bool)
-	var sampleIDs []string
+	tagSamples := make(map[int64][]string)
 
-	addSampleIDs := func(ids []string) {
-		limit := 4
-		if len(ids) < limit {
-			limit = len(ids)
+	if len(tagMetas) > 0 {
+		samplesQuery := fmt.Sprintf(`
+			WITH ranked_photos AS (
+				SELECT
+					vt.tag_id,
+					videos.id AS video_id,
+					ROW_NUMBER() OVER (
+						PARTITION BY vt.tag_id
+						ORDER BY videos.published_at DESC, videos.id ASC
+					) AS rn
+				FROM video_tags vt
+				JOIN tags t ON t.id = vt.tag_id
+				JOIN videos ON videos.id = vt.video_id
+				WHERE COALESCE(videos.hidden, 0) = 0
+				  AND %s
+				  AND %s
+				  AND %s
+				  AND TRIM(COALESCE(t.label, '')) != ''
+				  AND LOWER(TRIM(t.label)) NOT IN (%s)
+			)
+			SELECT tag_id, video_id
+			FROM ranked_photos
+			WHERE rn <= 4
+			ORDER BY tag_id ASC, rn ASC
+		`, activeDriveWhereSQL, uniqueVideoWhereSQL, photoAlbumImagePredicate, sysTags)
+
+		sampleRows, err := c.db.QueryContext(ctx, samplesQuery)
+		if err != nil {
+			return nil, fmt.Errorf("query photo album samples: %w", err)
 		}
-		for i := 0; i < limit; i++ {
-			id := ids[i]
-			if !sampleIDSet[id] {
-				sampleIDSet[id] = true
-				sampleIDs = append(sampleIDs, id)
+		defer sampleRows.Close()
+
+		for sampleRows.Next() {
+			var tagID int64
+			var videoID string
+			if err := sampleRows.Scan(&tagID, &videoID); err != nil {
+				return nil, err
+			}
+			tagSamples[tagID] = append(tagSamples[tagID], videoID)
+			if !sampleIDSet[videoID] {
+				sampleIDSet[videoID] = true
+				allSampleIDs = append(allSampleIDs, videoID)
+			}
+		}
+		if err := sampleRows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Query 3 & 4: Uncategorized photos (photos with no non-system tags)
+	uncatCountQuery := fmt.Sprintf(`
+		SELECT
+			COUNT(*),
+			COALESCE(MAX(videos.published_at), 0)
+		FROM videos
+		WHERE COALESCE(videos.hidden, 0) = 0
+		  AND %s
+		  AND %s
+		  AND %s
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM video_tags vt
+			  JOIN tags t ON t.id = vt.tag_id
+			  WHERE vt.video_id = videos.id
+				AND TRIM(COALESCE(t.label, '')) != ''
+				AND LOWER(TRIM(t.label)) NOT IN (%s)
+		  )
+	`, activeDriveWhereSQL, uniqueVideoWhereSQL, photoAlbumImagePredicate, sysTags)
+
+	var uncatCount int
+	var uncatLatestPub int64
+	if err := c.db.QueryRowContext(ctx, uncatCountQuery).Scan(&uncatCount, &uncatLatestPub); err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("query uncategorized photo count: %w", err)
+	}
+
+	var uncatSampleIDs []string
+	if uncatCount > 0 {
+		uncatSamplesQuery := fmt.Sprintf(`
+			SELECT videos.id
+			FROM videos
+			WHERE COALESCE(videos.hidden, 0) = 0
+			  AND %s
+			  AND %s
+			  AND %s
+			  AND NOT EXISTS (
+				  SELECT 1
+				  FROM video_tags vt
+				  JOIN tags t ON t.id = vt.tag_id
+				  WHERE vt.video_id = videos.id
+					AND TRIM(COALESCE(t.label, '')) != ''
+					AND LOWER(TRIM(t.label)) NOT IN (%s)
+			  )
+			ORDER BY videos.published_at DESC, videos.id ASC
+			LIMIT 4
+		`, activeDriveWhereSQL, uniqueVideoWhereSQL, photoAlbumImagePredicate, sysTags)
+
+		uRows, err := c.db.QueryContext(ctx, uncatSamplesQuery)
+		if err != nil {
+			return nil, fmt.Errorf("query uncategorized samples: %w", err)
+		}
+		defer uRows.Close()
+
+		for uRows.Next() {
+			var vid string
+			if err := uRows.Scan(&vid); err != nil {
+				return nil, err
+			}
+			uncatSampleIDs = append(uncatSampleIDs, vid)
+			if !sampleIDSet[vid] {
+				sampleIDSet[vid] = true
+				allSampleIDs = append(allSampleIDs, vid)
+			}
+		}
+		if err := uRows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	// 5. Batch fetch summaries for all sample photos
+	summaryMap := make(map[string]*VideoSummary)
+	if len(allSampleIDs) > 0 {
+		summaries, err := c.VisibleVideoSummariesByIDs(ctx, allSampleIDs)
+		if err != nil {
+			return nil, fmt.Errorf("fetch photo album summaries: %w", err)
+		}
+		for _, s := range summaries {
+			if s != nil {
+				summaryMap[s.ID] = s
 			}
 		}
 	}
 
-	for _, vids := range tagToVideoIDs {
-		addSampleIDs(vids)
-	}
-	if len(uncategorizedIDs) > 0 {
-		addSampleIDs(uncategorizedIDs)
-	}
-
-	summaries, err := c.VisibleVideoSummariesByIDs(ctx, sampleIDs)
-	if err != nil {
-		return nil, err
-	}
-	summaryMap := make(map[string]*VideoSummary, len(summaries))
-	for _, s := range summaries {
-		if s != nil {
-			summaryMap[s.ID] = s
-		}
-	}
-
+	// 6. Build albums list
 	var albums []PhotoAlbum
-	for tag, vids := range tagToVideoIDs {
-		if len(vids) == 0 {
-			continue
-		}
+	for _, tm := range tagMetas {
 		var sampleList []*VideoSummary
-		limit := 4
-		if len(vids) < limit {
-			limit = len(vids)
-		}
-		for i := 0; i < limit; i++ {
-			if s, ok := summaryMap[vids[i]]; ok {
+		for _, vid := range tagSamples[tm.id] {
+			if s, ok := summaryMap[vid]; ok {
 				sampleList = append(sampleList, s)
 			}
 		}
 		var cover *VideoSummary
-		var latestTs int64
+		latestTs := tm.latestPub
 		if len(sampleList) > 0 {
 			cover = sampleList[0]
-			latestTs = cover.PublishedAt.UnixMilli()
+			if latestTs == 0 && cover != nil {
+				latestTs = cover.PublishedAt.UnixMilli()
+			}
 		}
-		title := tag
+		title := tm.label
 		if !strings.HasPrefix(title, "#") {
 			title = "#" + title
 		}
 		albums = append(albums, PhotoAlbum{
-			Tag:             tag,
+			Tag:             tm.label,
 			Title:           title,
-			Count:           len(vids),
+			Count:           tm.count,
 			CoverPhoto:      cover,
 			SamplePhotos:    sampleList,
 			LatestTimestamp: latestTs,
 		})
 	}
 
-	slices.SortFunc(albums, func(a, b PhotoAlbum) int {
-		if b.Count != a.Count {
-			return b.Count - a.Count
-		}
-		if b.LatestTimestamp > a.LatestTimestamp {
-			return 1
-		} else if b.LatestTimestamp < a.LatestTimestamp {
-			return -1
-		}
-		return strings.Compare(a.Tag, b.Tag)
-	})
-
-	if len(uncategorizedIDs) > 0 {
+	if uncatCount > 0 {
 		var sampleList []*VideoSummary
-		limit := 4
-		if len(uncategorizedIDs) < limit {
-			limit = len(uncategorizedIDs)
-		}
-		for i := 0; i < limit; i++ {
-			if s, ok := summaryMap[uncategorizedIDs[i]]; ok {
+		for _, vid := range uncatSampleIDs {
+			if s, ok := summaryMap[vid]; ok {
 				sampleList = append(sampleList, s)
 			}
 		}
 		var cover *VideoSummary
-		var latestTs int64
+		latestTs := uncatLatestPub
 		if len(sampleList) > 0 {
 			cover = sampleList[0]
-			latestTs = cover.PublishedAt.UnixMilli()
+			if latestTs == 0 && cover != nil {
+				latestTs = cover.PublishedAt.UnixMilli()
+			}
 		}
 		albums = append(albums, PhotoAlbum{
 			Tag:             "未分类",
 			Title:           "未分类图集",
-			Count:           len(uncategorizedIDs),
+			Count:           uncatCount,
 			CoverPhoto:      cover,
 			SamplePhotos:    sampleList,
 			LatestTimestamp: latestTs,
 		})
 	}
+
+	// 7. Write to in-memory cache
+	c.photoAlbumsMu.Lock()
+	c.photoAlbumsCache = make([]PhotoAlbum, len(albums))
+	copy(c.photoAlbumsCache, albums)
+	c.photoAlbumsUntil = time.Now().Add(30 * time.Second)
+	c.photoAlbumsMu.Unlock()
 
 	return albums, nil
 }

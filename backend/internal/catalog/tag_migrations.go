@@ -84,6 +84,45 @@ UPDATE videos
 	if err := c.addColumnIfMissing(ctx, "videos", "last_liked_at", "INTEGER DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := c.addColumnIfMissing(ctx, "videos", "media_kind", "TEXT NOT NULL DEFAULT 'video'"); err != nil {
+		return err
+	}
+	if err := c.addColumnIfMissing(ctx, "videos", "mime_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := c.addColumnIfMissing(ctx, "videos", "width", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := c.addColumnIfMissing(ctx, "videos", "height", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if _, err := c.db.ExecContext(ctx, `
+UPDATE videos
+   SET media_kind = 'image'
+ WHERE media_kind = 'video'
+   AND LOWER(TRIM(COALESCE(ext, ''), '.')) IN ('jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp')
+`); err != nil {
+		return err
+	}
+	if _, err := c.db.ExecContext(ctx, `
+UPDATE videos
+   SET mime_type = CASE LOWER(TRIM(COALESCE(ext, ''), '.'))
+                     WHEN 'jpg' THEN 'image/jpeg'
+                     WHEN 'jpeg' THEN 'image/jpeg'
+                     WHEN 'png' THEN 'image/png'
+                     WHEN 'webp' THEN 'image/webp'
+                     WHEN 'gif' THEN 'image/gif'
+                     WHEN 'bmp' THEN 'image/bmp'
+                     WHEN 'mp4' THEN 'video/mp4'
+                     WHEN 'webm' THEN 'video/webm'
+                     WHEN 'mkv' THEN 'video/x-matroska'
+                     WHEN 'mov' THEN 'video/quicktime'
+                     ELSE mime_type
+                   END
+ WHERE COALESCE(mime_type, '') = ''
+`); err != nil {
+		return err
+	}
 	// 目录身份用于同目录合集。非常早期的库可能还没有 parent_id；先补身份列，
 	// 再补仅用于展示和标签匹配的目录名。
 	if err := c.addColumnIfMissing(ctx, "videos", "parent_id", "TEXT DEFAULT ''"); err != nil {
@@ -1065,6 +1104,10 @@ var currentVideoColumnNames = []string{
 	"published_at",
 	"created_at",
 	"updated_at",
+	"media_kind",
+	"mime_type",
+	"width",
+	"height",
 }
 
 const createCurrentVideosTableSQL = `
@@ -1109,7 +1152,11 @@ CREATE TABLE videos_schema_rebuild_new (
     description        TEXT,
     published_at       INTEGER NOT NULL,
     created_at         INTEGER NOT NULL,
-    updated_at         INTEGER NOT NULL
+    updated_at         INTEGER NOT NULL,
+    media_kind         TEXT NOT NULL DEFAULT 'video',
+    mime_type          TEXT NOT NULL DEFAULT '',
+    width              INTEGER NOT NULL DEFAULT 0,
+    height             INTEGER NOT NULL DEFAULT 0
 )`
 
 func (c *Catalog) rebuildVideosTableWithCurrentColumns(ctx context.Context) error {
@@ -1125,7 +1172,34 @@ func (c *Catalog) rebuildVideosTableWithCurrentColumns(ctx context.Context) erro
 	if _, err := tx.ExecContext(ctx, createCurrentVideosTableSQL); err != nil {
 		return err
 	}
-	cols := strings.Join(currentVideoColumnNames, ", ")
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(videos)`)
+	if err != nil {
+		return err
+	}
+	existingCols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var dflt any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existingCols[strings.ToLower(name)] = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	var copyCols []string
+	for _, col := range currentVideoColumnNames {
+		if existingCols[strings.ToLower(col)] {
+			copyCols = append(copyCols, col)
+		}
+	}
+	cols := strings.Join(copyCols, ", ")
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO videos_schema_rebuild_new (`+cols+`) SELECT `+cols+` FROM videos`); err != nil {
 		return err

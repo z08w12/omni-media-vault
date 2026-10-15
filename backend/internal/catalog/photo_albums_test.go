@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -118,5 +119,105 @@ func TestPhotoAlbumsAndBatchTags(t *testing.T) {
 		if tName == "空心柚七" {
 			t.Fatalf("tag 空心柚七 should have been removed from img-1")
 		}
+	}
+}
+
+func TestPhotoAlbumsCacheAndWindowSampling(t *testing.T) {
+	ctx := context.Background()
+	cat, err := Open(t.TempDir() + "/photo_albums_window_test.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	defer cat.Close()
+
+	now := time.Now()
+	// Insert 6 image items for the same tag "风景"
+	for i := 1; i <= 6; i++ {
+		img := &Video{
+			ID:          fmt.Sprintf("img-%d", i),
+			DriveID:     "drive-1",
+			FileID:      fmt.Sprintf("file-%d", i),
+			Title:       fmt.Sprintf("Image %d", i),
+			Ext:         "jpg",
+			PublishedAt: now.Add(time.Duration(i) * time.Second),
+			CreatedAt:   now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:   now.Add(time.Duration(i) * time.Second),
+			MediaKind:   "image",
+		}
+		if err := cat.UpsertVideo(ctx, img); err != nil {
+			t.Fatalf("upsert img %d: %v", i, err)
+		}
+	}
+
+	_, err = cat.BatchUpdateVideoTags(ctx, []string{"img-1", "img-2", "img-3", "img-4", "img-5", "img-6"}, "add", []string{"风景"})
+	if err != nil {
+		t.Fatalf("batch update tags: %v", err)
+	}
+
+	// First call to ListPhotoAlbums (computes & caches)
+	albums, err := cat.ListPhotoAlbums(ctx)
+	if err != nil {
+		t.Fatalf("ListPhotoAlbums: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("expected 1 album, got %d", len(albums))
+	}
+	album := albums[0]
+	if album.Tag != "风景" || album.Count != 6 {
+		t.Fatalf("album tag=%s, count=%d, want 风景/6", album.Tag, album.Count)
+	}
+	// Window function should limit samples to exactly 4, newest first: img-6, img-5, img-4, img-3
+	if len(album.SamplePhotos) != 4 {
+		t.Fatalf("expected 4 sample photos, got %d", len(album.SamplePhotos))
+	}
+	expectedOrder := []string{"img-6", "img-5", "img-4", "img-3"}
+	for i, exp := range expectedOrder {
+		if album.SamplePhotos[i].ID != exp {
+			t.Fatalf("sample photo[%d] = %s, want %s", i, album.SamplePhotos[i].ID, exp)
+		}
+	}
+	if album.CoverPhoto == nil || album.CoverPhoto.ID != "img-6" {
+		t.Fatalf("expected cover photo img-6, got %v", album.CoverPhoto)
+	}
+
+	// Verify cached read returns exact same results
+	cachedAlbums, err := cat.ListPhotoAlbums(ctx)
+	if err != nil {
+		t.Fatalf("cached ListPhotoAlbums: %v", err)
+	}
+	if len(cachedAlbums) != 1 || cachedAlbums[0].Count != 6 {
+		t.Fatalf("cache read mismatch: %+v", cachedAlbums)
+	}
+
+	// Test cache invalidation: add an 7th image
+	img7 := &Video{
+		ID:          "img-7",
+		DriveID:     "drive-1",
+		FileID:      "file-7",
+		Title:       "Image 7",
+		Ext:         "png",
+		PublishedAt: now.Add(7 * time.Second),
+		CreatedAt:   now.Add(7 * time.Second),
+		UpdatedAt:   now.Add(7 * time.Second),
+		MediaKind:   "image",
+	}
+	if err := cat.UpsertVideo(ctx, img7); err != nil {
+		t.Fatalf("upsert img 7: %v", err)
+	}
+	_, err = cat.BatchUpdateVideoTags(ctx, []string{"img-7"}, "add", []string{"风景"})
+	if err != nil {
+		t.Fatalf("tag img 7: %v", err)
+	}
+
+	// ListPhotoAlbums should reflect count 7 and new top 4 (img-7, img-6, img-5, img-4)
+	albumsAfter, err := cat.ListPhotoAlbums(ctx)
+	if err != nil {
+		t.Fatalf("ListPhotoAlbums after update: %v", err)
+	}
+	if albumsAfter[0].Count != 7 {
+		t.Fatalf("expected count 7 after invalidation, got %d", albumsAfter[0].Count)
+	}
+	if albumsAfter[0].SamplePhotos[0].ID != "img-7" {
+		t.Fatalf("expected sample[0] to be img-7, got %s", albumsAfter[0].SamplePhotos[0].ID)
 	}
 }

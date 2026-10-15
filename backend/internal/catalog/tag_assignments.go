@@ -317,7 +317,11 @@ func (c *Catalog) replaceManualVideoTags(ctx context.Context, videoID string, la
 	if err := syncVideoTagsJSONTx(ctx, tx, videoID, true); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	c.InvalidatePhotoAlbumsCache()
+	return nil
 }
 
 // ReplaceAutoVideoTags 用给定分配覆盖视频的引擎标签（source IN auto/legacy），
@@ -339,7 +343,11 @@ func (c *Catalog) ReplaceAutoVideoTags(ctx context.Context, videoID string, assi
 	if err := syncVideoTagsJSONTx(ctx, tx, videoID, false); err != nil {
 		return false, err
 	}
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	c.InvalidatePhotoAlbumsCache()
+	return true, nil
 }
 
 type videoTagAssignmentRow struct {

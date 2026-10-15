@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/dedupe"
@@ -31,6 +32,11 @@ type duplicateVideoMaintenanceStats struct {
 func (a *App) cleanupDuplicateVideoAssets(ctx context.Context) error {
 	if a == nil || a.cat == nil {
 		return nil
+	}
+	if n, err := a.cat.PurgeExpiredReactionVisits(ctx, 90*24*time.Hour, 500); err != nil {
+		log.Printf("[dedupe-maintenance] purge expired reaction visits: %v", err)
+	} else if n > 0 {
+		log.Printf("[dedupe-maintenance] purged %d expired reaction visit record(s)", n)
 	}
 	localDir := ""
 	if a.cfg != nil {

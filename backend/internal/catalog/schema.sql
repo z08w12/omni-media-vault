@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS videos (
     description      TEXT,
     published_at     INTEGER NOT NULL,          -- unix ms
     created_at       INTEGER NOT NULL,
-    updated_at       INTEGER NOT NULL
+    updated_at       INTEGER NOT NULL,
+    media_kind       TEXT NOT NULL DEFAULT 'video', -- 'video', 'image', 'audio'
+    mime_type        TEXT NOT NULL DEFAULT '',      -- e.g. 'image/jpeg', 'video/mp4'
+    width            INTEGER NOT NULL DEFAULT 0,
+    height           INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_videos_drive ON videos(drive_id, file_id);
@@ -92,8 +96,6 @@ CREATE TABLE IF NOT EXISTS remote_upload_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_remote_upload_jobs_queue
     ON remote_upload_jobs(state, sequence);
-CREATE INDEX IF NOT EXISTS idx_remote_upload_jobs_recent
-    ON remote_upload_jobs(sequence DESC);
 CREATE INDEX IF NOT EXISTS idx_remote_upload_jobs_finished
     ON remote_upload_jobs(finished_at);
 
@@ -110,8 +112,8 @@ CREATE TABLE IF NOT EXISTS video_reaction_visits (
     PRIMARY KEY (video_id, visit_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_video_reaction_visits_video
-    ON video_reaction_visits(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_reaction_visits_updated
+    ON video_reaction_visits(updated_at);
 
 -- 统一标签池
 CREATE TABLE IF NOT EXISTS tags (
@@ -380,4 +382,11 @@ CREATE TABLE IF NOT EXISTS telegram_settings (
 CREATE TABLE IF NOT EXISTS crawler_upload_results (
   drive_id TEXT PRIMARY KEY,
   result TEXT NOT NULL
+);
+
+-- 模式版本迁移记录表
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     TEXT PRIMARY KEY,
+    applied_at  INTEGER NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
 );

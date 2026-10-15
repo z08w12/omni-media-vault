@@ -110,6 +110,9 @@ func (s *Server) InvalidateTagCache() {
 	s.tagCache = nil
 	s.tagCacheUntil = time.Time{}
 	s.tagCacheMu.Unlock()
+	if s.Catalog != nil {
+		s.Catalog.InvalidatePhotoAlbumsCache()
+	}
 }
 
 type subtitleCacheEntry struct {
@@ -145,6 +148,10 @@ type VideoDTO struct {
 	Dislikes        int      `json:"dislikes"`
 	PublishedAt     string   `json:"publishedAt"`
 	Tags            []string `json:"tags,omitempty"`
+	MediaKind       string   `json:"mediaKind,omitempty"`
+	MIMEType        string   `json:"mimeType,omitempty"`
+	Width           int      `json:"width,omitempty"`
+	Height          int      `json:"height,omitempty"`
 }
 
 // VideoCardDTO is the compact transport used by infinite listing feeds. The
@@ -160,10 +167,12 @@ type VideoCardDTO struct {
 	PreviewStrategy string   `json:"previewStrategy"`
 	Duration        string   `json:"duration"`
 	Badges          []string `json:"badges"`
-	Tags            []string `json:"tags,omitempty"`
 	Author          string   `json:"author"`
 	Views           int      `json:"views"`
 	PublishedAt     string   `json:"publishedAt"`
+	MediaKind       string   `json:"mediaKind,omitempty"`
+	Width           int      `json:"width,omitempty"`
+	Height          int      `json:"height,omitempty"`
 }
 
 type TagDTO struct {
@@ -1352,6 +1361,10 @@ func mapVideo(v *catalog.Video) VideoDTO {
 		Dislikes:        v.Dislikes,
 		PublishedAt:     v.PublishedAt.Format("2006-01-02"),
 		Tags:            tags,
+		MediaKind:       v.MediaKind,
+		MIMEType:        v.MIMEType,
+		Width:           v.Width,
+		Height:          v.Height,
 	}
 }
 
@@ -1949,10 +1962,6 @@ func mapVideoSummaries(videos []*catalog.VideoSummary) []VideoCardDTO {
 		if badges == nil {
 			badges = []string{}
 		}
-		tags := video.Tags
-		if tags == nil {
-			tags = []string{}
-		}
 		out = append(out, VideoCardDTO{
 			ID:              video.ID,
 			Href:            "/video/" + pathSegment(video.ID),
@@ -1963,10 +1972,12 @@ func mapVideoSummaries(videos []*catalog.VideoSummary) []VideoCardDTO {
 			PreviewStrategy: "teaser-file",
 			Duration:        formatDuration(video.DurationSeconds),
 			Badges:          badges,
-			Tags:            tags,
 			Author:          video.Author,
 			Views:           video.Views,
 			PublishedAt:     video.PublishedAt.Format("2006-01-02"),
+			MediaKind:       video.MediaKind,
+			Width:           video.Width,
+			Height:          video.Height,
 		})
 	}
 	return out

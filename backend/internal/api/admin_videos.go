@@ -58,6 +58,10 @@ type adminVideoDTO struct {
 	PublishedAt       time.Time         `json:"publishedAt"`
 	CreatedAt         time.Time         `json:"createdAt"`
 	UpdatedAt         time.Time         `json:"updatedAt"`
+	MediaKind         string            `json:"mediaKind,omitempty"`
+	MIMEType          string            `json:"mimeType,omitempty"`
+	Width             int               `json:"width,omitempty"`
+	Height            int               `json:"height,omitempty"`
 }
 
 func mapAdminVideo(v *catalog.Video) adminVideoDTO {
@@ -96,6 +100,10 @@ func mapAdminVideo(v *catalog.Video) adminVideoDTO {
 		PublishedAt:       v.PublishedAt,
 		CreatedAt:         v.CreatedAt,
 		UpdatedAt:         v.UpdatedAt,
+		MediaKind:         v.MediaKind,
+		MIMEType:          v.MIMEType,
+		Width:             v.Width,
+		Height:            v.Height,
 	}
 }
 

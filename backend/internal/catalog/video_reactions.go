@@ -177,3 +177,40 @@ func validVideoReactionVisitID(value string) bool {
 	}
 	return true
 }
+
+// PurgeExpiredReactionVisits deletes expired reaction visit records in small batches.
+// Purging old visits frees database storage without modifying aggregated video like/dislike counts.
+func (c *Catalog) PurgeExpiredReactionVisits(ctx context.Context, retention time.Duration, batchSize int) (int64, error) {
+	if retention <= 0 {
+		retention = 90 * 24 * time.Hour
+	}
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+	cutoff := time.Now().Add(-retention).UnixMilli()
+
+	var totalDeleted int64
+	for {
+		res, err := c.db.ExecContext(ctx, `
+			DELETE FROM video_reaction_visits
+			WHERE (video_id, visit_id) IN (
+				SELECT video_id, visit_id
+				FROM video_reaction_visits
+				WHERE updated_at < ?
+				LIMIT ?
+			)
+		`, cutoff, batchSize)
+		if err != nil {
+			return totalDeleted, err
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return totalDeleted, err
+		}
+		totalDeleted += rows
+		if rows < int64(batchSize) {
+			break
+		}
+	}
+	return totalDeleted, nil
+}

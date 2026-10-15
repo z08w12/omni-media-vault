@@ -150,6 +150,7 @@ export function useVideoDetailCore(id?: string) {
     return visibleRecommendations
       .filter(
         (v) =>
+          v.mediaKind === "image" ||
           v.duration === "图片" ||
           Boolean(v.thumbnail && /\.(jpe?g|png|webp|gif|bmp)(\?.*)?$/i.test(v.thumbnail))
       )
@@ -498,7 +499,8 @@ export function useVideoDetailCore(id?: string) {
 
   const isPhotoMedia = Boolean(
     detail &&
-      (detail.duration === "图片" ||
+      (detail.mediaKind === "image" ||
+        detail.duration === "图片" ||
         (detail.mediaType ? detail.mediaType.startsWith("image/") : false) ||
         Boolean(
           detail.videoSrc &&

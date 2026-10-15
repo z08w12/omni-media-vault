@@ -1815,7 +1815,7 @@ function CurrentVideoCard({
   onTranscode: () => void;
   onDelete: () => void;
 }) {
-  const isImage = isImageExtension(video.ext);
+  const isImage = video.mediaKind === "image" || isImageExtension(video.ext);
 
   return (
     <article className="admin-video-card" role="listitem">
