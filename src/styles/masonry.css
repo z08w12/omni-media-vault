@@ -46,16 +46,23 @@
 .masonry-img-wrap {
   position: relative;
   width: 100%;
+  min-height: 160px;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  background: #1a1e29;
+  background: #141721;
 }
 
 .masonry-img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   object-fit: cover;
-  transition: transform 0.35s ease;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.35s ease;
+}
+
+.masonry-img.is-loaded {
+  opacity: 1;
 }
 
 .masonry-img-wrap[style*="aspect-ratio"] .masonry-img {

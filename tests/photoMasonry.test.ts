@@ -36,3 +36,14 @@ test("masonry.css provides flex column waterfall layout with gutter offsets", ()
   assert.match(masonryCss, /\.masonry-column\s*\{[^}]*padding-left:/);
   assert.match(masonryCss, /\.masonry-img-wrap\[style\*="aspect-ratio"\]\s*\.masonry-img\s*\{[^}]*height:\s*100%;/);
 });
+
+test("MasonryGrid guarantees non-zero card height and per-card loading shimmer", () => {
+  // Fallback aspect ratio is computed for items missing dimension metadata in db
+  assert.match(masonryGridSource, /getPhotoFallbackAspectRatio/);
+  assert.match(masonryGridSource, /photos-skeleton-shimmer/);
+  assert.match(masonryGridSource, /is-loaded/);
+
+  // CSS ensures min-height and aspect-ratio fallback so card never collapses to 2px line
+  assert.match(masonryCss, /\.masonry-img-wrap\s*\{[^}]*min-height:\s*160px;/);
+  assert.match(masonryCss, /\.masonry-img-wrap\s*\{[^}]*aspect-ratio:\s*3\s*\/\s*4;/);
+});

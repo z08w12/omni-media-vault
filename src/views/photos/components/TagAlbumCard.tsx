@@ -1,7 +1,8 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { FolderHeart, Images } from "lucide-react";
 import type { TagAlbum } from "@/hooks/useTagAlbums";
 import "@/styles/tag-album.css";
+import "@/styles/photos-page.css";
 
 type TagAlbumCardProps = {
   album: TagAlbum;
@@ -14,6 +15,7 @@ export const TagAlbumCard = memo(function TagAlbumCard({
   onOpenAlbum,
   onSelectTag,
 }: TagAlbumCardProps) {
+  const [coverLoaded, setCoverLoaded] = useState(false);
   const coverUrl =
     album.coverPhoto.thumbnail ||
     album.coverPhoto.previewSrc ||
@@ -33,11 +35,24 @@ export const TagAlbumCard = memo(function TagAlbumCard({
       }}
     >
       <div className="tag-album-cover-wrap">
+        {!coverLoaded && (
+          <div
+            className="photos-skeleton-shimmer"
+            style={{ position: "absolute", inset: 0, zIndex: 1 }}
+            aria-hidden="true"
+          />
+        )}
         <img
           src={coverUrl}
           alt={album.title}
-          className="tag-album-cover"
+          className={`tag-album-cover ${coverLoaded ? "is-loaded" : ""}`}
           loading="lazy"
+          onLoad={() => setCoverLoaded(true)}
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth > 0 && !coverLoaded) {
+              setCoverLoaded(true);
+            }
+          }}
         />
 
         {/* Photo count badge */}
