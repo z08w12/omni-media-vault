@@ -1,12 +1,15 @@
 {
-  "name": "Omni-Media-Vault",
+  "name": "OmniMediaVault",
   "short_name": "OmniVault",
+  "description": "个人私有多媒体影音中心与高清相册",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["fullscreen", "standalone"],
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "background_color": "#0a0d14",
+  "theme_color": "#0a0d14",
+  "orientation": "any",
+  "categories": ["entertainment", "video", "photo"],
   "icons": [
     {
       "src": "/app-icon-192.png",
@@ -25,6 +28,29 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "精选视频",
+      "short_name": "精选",
+      "description": "查看最新与精选视频推荐",
+      "url": "/",
+      "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "沉浸短视频",
+      "short_name": "短视频",
+      "description": "全屏滑动畅快刷视频",
+      "url": "/shorts",
+      "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "高清相册",
+      "short_name": "相册",
+      "description": "自适应瀑布流图集",
+      "url": "/photos",
+      "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

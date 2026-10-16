@@ -117,3 +117,48 @@ func TestResolveFrontendDirFallsBackToParentDist(t *testing.T) {
 		t.Fatalf("frontend dir = %q, want ../dist", got)
 	}
 }
+
+func TestFrontendHandlerServesPWAAssetsWithRevalidation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>app</html>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sw.js"), []byte("console.log('sw')"), 0o644); err != nil {
+		t.Fatalf("write sw: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.webmanifest"), []byte(`{"name":"OmniVault"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	handler := frontendHandler(dir)
+
+	// Test /sw.js
+	{
+		req := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("sw.js status = %d, want 200", rr.Code)
+		}
+		if got := rr.Header().Get("Cache-Control"); got != frontendIndexCacheControl {
+			t.Fatalf("sw.js Cache-Control = %q, want %q", got, frontendIndexCacheControl)
+		}
+	}
+
+	// Test /manifest.webmanifest
+	{
+		req := httptest.NewRequest(http.MethodGet, "/manifest.webmanifest", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("manifest.webmanifest status = %d, want 200", rr.Code)
+		}
+		if got := rr.Header().Get("Cache-Control"); got != frontendIndexCacheControl {
+			t.Fatalf("manifest.webmanifest Cache-Control = %q, want %q", got, frontendIndexCacheControl)
+		}
+		if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/manifest+json") {
+			t.Fatalf("manifest.webmanifest Content-Type = %q, want application/manifest+json", got)
+		}
+	}
+}
+

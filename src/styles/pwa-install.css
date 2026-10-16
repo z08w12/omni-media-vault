@@ -1,0 +1,135 @@
+.pwa-install-banner {
+  position: fixed;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  left: 12px;
+  right: 12px;
+  max-width: 440px;
+  margin: 0 auto;
+  z-index: 1050;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+  padding: 14px 16px;
+  color: #f1f5f9;
+  animation: pwaSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pwaSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pwa-install-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pwa-install-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwa-install-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.pwa-install-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pwa-install-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 2px 0;
+  letter-spacing: -0.2px;
+}
+
+.pwa-install-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pwa-install-close {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: color 0.15s ease;
+
+  &:hover, &:active {
+    color: #f1f5f9;
+  }
+}
+
+.pwa-install-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pwa-install-btn {
+  padding: 7px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+
+  &--primary {
+    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+    color: #0f172a;
+    box-shadow: 0 2px 10px rgba(56, 189, 248, 0.35);
+
+    &:active {
+      transform: scale(0.96);
+    }
+  }
+
+  &--dismiss {
+    background: rgba(30, 41, 59, 0.6);
+    color: #94a3b8;
+
+    &:active {
+      color: #f1f5f9;
+    }
+  }
+}
+
+.pwa-ios-instructions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(56, 189, 248, 0.3);
+  margin-top: 2px;
+}

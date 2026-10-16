@@ -35,6 +35,10 @@ const (
 	responseBrotliQuality        = 4
 )
 
+func init() {
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
+}
+
 var dynamicCompressibleContentTypes = map[string]struct{}{
 	"application/javascript":    {},
 	"application/json":          {},
@@ -491,7 +495,7 @@ func frontendHandler(dir string) http.HandlerFunc {
 					if strings.HasPrefix(cleanPath, "/assets/") {
 						w.Header().Set("Cache-Control", frontendHashedAssetCacheControl)
 						addHeaderToken(w.Header(), "Vary", "Accept-Encoding")
-					} else if cleanPath == "/index.html" {
+					} else if cleanPath == "/index.html" || cleanPath == "/sw.js" || cleanPath == "/manifest.webmanifest" {
 						w.Header().Set("Cache-Control", frontendIndexCacheControl)
 					}
 					if encoding != "" {
@@ -499,6 +503,8 @@ func frontendHandler(dir string) http.HandlerFunc {
 						if contentType := mime.TypeByExtension(filepath.Ext(name)); contentType != "" {
 							w.Header().Set("Content-Type", contentType)
 						}
+					} else if contentType := mime.TypeByExtension(filepath.Ext(name)); contentType != "" {
+						w.Header().Set("Content-Type", contentType)
 					}
 					http.ServeContent(w, r, filepath.Base(name), st.ModTime(), f)
 					return

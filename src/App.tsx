@@ -16,6 +16,7 @@ import {
   type Location,
 } from "react-router";
 import { SkyStarfield } from "@/components/SkyStarfield";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { VideoDetailLoading } from "@/components/VideoDetailLoading";
 import { CrawlersPageLoading } from "@/admin/CrawlersPageLoading";
 import { useAuth } from "@/admin/AuthContext";
@@ -407,6 +408,7 @@ export default function App() {
         <OtherRoutes />
       )}
       {listingBackground && <VideoDetailForeground />}
+      <InstallPrompt />
     </>
   );
 }

@@ -8,6 +8,7 @@ import { DeviceProvider } from "./platform";
 import { syncThemeFromServer } from "./lib/theme";
 import { initializeListingScrollRestore } from "./lib/listingScrollRestore";
 import { initializeControlFocus } from "./lib/controlFocus";
+import { registerServiceWorker } from "./pwa/registerServiceWorker";
 
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -30,6 +31,7 @@ syncThemeFromServer();
 
 initializeListingScrollRestore(window);
 initializeControlFocus(document);
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
