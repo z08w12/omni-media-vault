@@ -1,27 +1,25 @@
-/* Staggered Masonry Waterfall Layout Styles */
+/* Staggered Masonry Waterfall Layout Styles using react-masonry-css */
 .masonry-feed {
-  column-gap: 16px;
+  display: flex;
+  margin-left: -16px;
+  width: auto;
   margin-bottom: 32px;
 }
 
-/* Responsive columns */
-.masonry-feed--desktop {
-  column-count: 4;
-}
-
-@media (min-width: 1440px) {
-  .masonry-feed--desktop {
-    column-count: 5;
-  }
-}
-
 .masonry-feed--mobile {
-  column-count: 2;
-  column-gap: 10px;
+  margin-left: -10px;
+}
+
+.masonry-column {
+  padding-left: 16px;
+  background-clip: padding-box;
+}
+
+.masonry-column--mobile {
+  padding-left: 10px;
 }
 
 .masonry-item {
-  break-inside: avoid;
   margin-bottom: 16px;
   border-radius: 10px;
   overflow: hidden;
@@ -58,6 +56,10 @@
   height: auto;
   object-fit: cover;
   transition: transform 0.35s ease;
+}
+
+.masonry-img-wrap[style*="aspect-ratio"] .masonry-img {
+  height: 100%;
 }
 
 .masonry-item:hover .masonry-img {

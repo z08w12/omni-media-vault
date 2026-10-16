@@ -46,3 +46,9 @@ ReadMeImage/*.png
 
 # Legacy Telegram deployment credentials
 .env.telegram
+
+# Agent private constraint configuration
+AGENTS.md
+AGENTS.local.md
+.agents/
+

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import Masonry from "react-masonry-css";
 import { Download, Maximize2 } from "lucide-react";
 import type { VideoItem } from "@/types";
 import "@/styles/masonry.css";
@@ -9,21 +10,44 @@ type MasonryGridProps = {
   onOpenPhoto: (photo: VideoItem, index: number) => void;
 };
 
+export const DESKTOP_MASONRY_BREAKPOINTS = {
+  default: 5,
+  1440: 4,
+  1024: 3,
+  768: 2,
+};
+
+export const MOBILE_MASONRY_BREAKPOINTS = {
+  default: 2,
+};
+
 export const MasonryGrid = memo(function MasonryGrid({
   items,
   isMobile = false,
   onOpenPhoto,
 }: MasonryGridProps) {
+  const breakpointCols = isMobile
+    ? MOBILE_MASONRY_BREAKPOINTS
+    : DESKTOP_MASONRY_BREAKPOINTS;
+
   return (
-    <div
+    <Masonry
+      breakpointCols={breakpointCols}
       className={`masonry-feed ${
         isMobile ? "masonry-feed--mobile" : "masonry-feed--desktop"
+      }`}
+      columnClassName={`masonry-column ${
+        isMobile ? "masonry-column--mobile" : "masonry-column--desktop"
       }`}
     >
       {items.map((item, index) => {
         const imageUrl =
           item.thumbnail || item.previewSrc || `/api/video/${item.id}/source`;
         const downloadUrl = `/api/video/${item.id}/source`;
+        const aspectRatio =
+          item.width && item.height && item.width > 0 && item.height > 0
+            ? `${item.width} / ${item.height}`
+            : undefined;
 
         return (
           <div
@@ -32,7 +56,10 @@ export const MasonryGrid = memo(function MasonryGrid({
             className="masonry-item"
             onClick={() => onOpenPhoto(item, index)}
           >
-            <div className="masonry-img-wrap">
+            <div
+              className="masonry-img-wrap"
+              style={aspectRatio ? { aspectRatio } : undefined}
+            >
               <img
                 src={imageUrl}
                 alt={item.title}
@@ -74,6 +101,6 @@ export const MasonryGrid = memo(function MasonryGrid({
           </div>
         );
       })}
-    </div>
+    </Masonry>
   );
 });
