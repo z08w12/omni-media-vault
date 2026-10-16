@@ -1,9 +1,9 @@
 /**
  * OmniMediaVault High-Performance Service Worker
- * Version: 1.6.0
+ * Version: 1.6.1
  */
 
-const CACHE_NAME = 'omv-shell-v1.6.0';
+const CACHE_NAME = 'omv-shell-v1.6.1';
 
 const PRECACHE_URLS = [
   '/',
