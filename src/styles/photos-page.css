@@ -260,6 +260,63 @@
   }
 }
 
+/* 真实卡片骨架屏动效 */
+.photos-skeleton-shimmer {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #161822 25%, #232736 50%, #161822 75%);
+  background-size: 200% 100%;
+  animation: photos-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.photos-skeleton-bar {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #181b26 25%, #282d3e 50%, #181b26 75%);
+  background-size: 200% 100%;
+  animation: photos-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.photos-skeleton-bar--title {
+  width: 65%;
+  height: 14px;
+  margin-bottom: 8px;
+}
+
+.photos-skeleton-bar--meta {
+  width: 38%;
+  height: 11px;
+}
+
+.tag-album-card--skeleton {
+  pointer-events: none;
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.tag-album-card--skeleton .tag-album-cover-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #151822;
+}
+
+.masonry-item--skeleton {
+  pointer-events: none;
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.05);
+  background: #141721;
+}
+
+@keyframes photos-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .photos-grid {

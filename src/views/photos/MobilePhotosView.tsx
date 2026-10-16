@@ -8,6 +8,7 @@ import { toPhotoSlides } from "@/lib/photoSlides";
 import { TagAlbumCard } from "./components/TagAlbumCard";
 import { PhotosViewSwitcher } from "./components/PhotosViewSwitcher";
 import { MasonryGrid } from "./components/MasonryGrid";
+import { AlbumsSkeletonGrid, PhotosWaterfallSkeleton } from "./components/PhotosSkeleton";
 import type { VideoItem } from "@/types";
 import type { TagAlbum, PhotosDisplayMode } from "@/hooks/useTagAlbums";
 import "@/styles/photos-page.css";
@@ -15,6 +16,7 @@ import "@/styles/tag-album.css";
 
 type Props = {
   items: VideoItem[];
+  total?: number;
   albums: TagAlbum[];
   displayMode: PhotosDisplayMode;
   setDisplayMode: (mode: PhotosDisplayMode) => void;
@@ -42,6 +44,7 @@ type Props = {
 
 export const MobilePhotosView = memo(function MobilePhotosView({
   items,
+  total,
   albums,
   displayMode,
   setDisplayMode,
@@ -67,6 +70,16 @@ export const MobilePhotosView = memo(function MobilePhotosView({
 }: Props) {
   const allPhotoSlides: PhotoSlide[] = useMemo(() => toPhotoSlides(items), [items]);
 
+  // 计算展示给用户的照片总数：优先使用 API 返回的全量 total，加载中时不抢显错误的小数字
+  const effectivePhotoCount =
+    total !== undefined && total > 0
+      ? total
+      : initialLoading
+      ? undefined
+      : items.length > 0
+      ? items.length
+      : total;
+
   const handleOpenAlbum = (album: TagAlbum) => {
     onSelectTag(album.tag);
   };
@@ -87,7 +100,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
             <p style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.45)", margin: 0 }}>
               {displayMode === "albums" && !tag
                 ? `${albums.length} 个主题相册`
-                : `${items.length} 张图片`}
+                : `共 ${effectivePhotoCount !== undefined ? effectivePhotoCount : items.length} 张图片`}
             </p>
 
             {tag && (
@@ -129,7 +142,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
                 mode={displayMode}
                 onChange={setDisplayMode}
                 albumCount={albums.length}
-                photoCount={items.length}
+                photoCount={effectivePhotoCount}
               />
             </div>
           )}
@@ -138,12 +151,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
             {displayMode === "albums" && !tag ? (
               /* 1. 标签相册列表模式（一次性全量加载完成，独立于单图瀑布流分页） */
               loadingAlbums && albums.length === 0 ? (
-                <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "60px 0" }}>
-                  <span className="preview-loader" style={{ margin: "0 auto 12px auto" }} />
-                  <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "13px" }}>
-                    正在加载相册列表...
-                  </p>
-                </div>
+                <AlbumsSkeletonGrid count={6} />
               ) : albumsError && albums.length === 0 ? (
                 <div className="photos-error-state" style={{ textAlign: "center", padding: "40px 0" }}>
                   <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>
@@ -183,12 +191,7 @@ export const MobilePhotosView = memo(function MobilePhotosView({
               /* 2. 单张照片瀑布流模式（支持无限滚动哨兵与分页状态） */
               <>
                 {initialLoading && items.length === 0 ? (
-                  <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "60px 0" }}>
-                    <span className="preview-loader" style={{ margin: "0 auto 12px auto" }} />
-                    <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "13px" }}>
-                      正在加载照片图集...
-                    </p>
-                  </div>
+                  <PhotosWaterfallSkeleton isMobile={true} />
                 ) : failed && items.length === 0 ? (
                   <div className="photos-error-state" style={{ textAlign: "center", padding: "40px 0" }}>
                     <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>

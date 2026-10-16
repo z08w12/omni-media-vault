@@ -79,6 +79,7 @@ export default function PhotosPage() {
   const retry = listing.retry;
   const loadMore = listing.loadMore;
   const items = listing.items;
+  const total = listing.total;
 
   // 1. IntersectionObserver bottom trigger
   useEffect(() => {
@@ -178,6 +179,7 @@ export default function PhotosPage() {
 
   const viewProps = {
     items,
+    total,
     albums,
     displayMode,
     setDisplayMode,
