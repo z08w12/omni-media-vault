@@ -22,6 +22,10 @@ const photosCss = readFileSync(
   new URL("../src/styles/photos-page.css", import.meta.url),
   "utf8"
 );
+const useTagAlbumsSource = readFileSync(
+  new URL("../src/hooks/useTagAlbums.ts", import.meta.url),
+  "utf8"
+);
 
 test("PhotosPage pauses listing pagination and guards bottom triggers during albums mode", () => {
   assert.match(photosPageSource, /const isAlbumsMode = displayMode === "albums" && !tag;/);
@@ -93,4 +97,30 @@ test("Photo loading replaces 3px preview-loader with realistic skeleton card gri
   assert.match(photosCss, /\.photos-skeleton-shimmer/);
   assert.match(photosCss, /\.tag-album-card--skeleton/);
   assert.match(photosCss, /\.masonry-item--skeleton/);
+});
+
+test("Gallery entry defaults to albums mode and clears legacy localStorage persistence", () => {
+  // useTagAlbums must initialize displayMode unconditionally to "albums"
+  assert.match(
+    useTagAlbumsSource,
+    /const \[displayMode, setDisplayModeState\] = useState<PhotosDisplayMode>\("albums"\);/
+  );
+  // Must purge legacy localStorage key to unstick users previously trapped in "photos" mode
+  assert.match(useTagAlbumsSource, /localStorage\.removeItem\(STORAGE_KEY_PHOTOS_VIEW\)/);
+  // setDisplayMode must not persist "photos" back to localStorage
+  assert.doesNotMatch(useTagAlbumsSource, /localStorage\.setItem\(STORAGE_KEY_PHOTOS_VIEW/);
+});
+
+test("PhotosPage coordinates urlMode with displayMode and resets view params on tag selection", () => {
+  // PhotosPage defaults urlMode to "albums" unless explicitly specified as "photos"
+  assert.match(
+    photosPageSource,
+    /const urlMode:\s*PhotosDisplayMode\s*=\s*\(\s*params\.get\("view"\)\s*\|\|\s*params\.get\("mode"\)\s*\)\s*===\s*"photos"\s*\?\s*"photos"\s*:\s*"albums";/
+  );
+  // Syncs URL mode with displayMode
+  assert.match(photosPageSource, /if\s*\(urlMode\s*!==\s*displayMode\)\s*\{\s*setDisplayMode\(urlMode\);/);
+  // handleSelectTag removes view and mode params to cleanly restore album view
+  assert.match(photosPageSource, /nextParams\.delete\("view"\);\s*nextParams\.delete\("mode"\);/);
+  // viewProps uses handleSetDisplayMode
+  assert.match(photosPageSource, /setDisplayMode:\s*handleSetDisplayMode/);
 });

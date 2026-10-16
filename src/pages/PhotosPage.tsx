@@ -10,7 +10,7 @@ import {
   useListingRestoreTarget,
   useListingScrollRestore,
 } from "@/lib/useListingScrollRestore";
-import { useTagAlbums } from "@/hooks/useTagAlbums";
+import { useTagAlbums, type PhotosDisplayMode } from "@/hooks/useTagAlbums";
 import { DesktopPhotosView } from "@/views/photos/DesktopPhotosView";
 import { MobilePhotosView } from "@/views/photos/MobilePhotosView";
 import type { PhotoSlide } from "@/components/PhotoLightbox";
@@ -41,6 +41,32 @@ export default function PhotosPage() {
     displayMode,
     setDisplayMode,
   } = useTagAlbums();
+
+  // URL view param: 默认始终为 "albums"（标签相册），仅当 URL 显式指定 ?view=photos 或 ?mode=photos 时展示单张瀑布流
+  const urlMode: PhotosDisplayMode =
+    (params.get("view") || params.get("mode")) === "photos" ? "photos" : "albums";
+
+  // 当外部导航（如点击底部/顶部导航的“图集”链接 /photos）或 URL 参数变动时，确保模式同步
+  useEffect(() => {
+    if (urlMode !== displayMode) {
+      setDisplayMode(urlMode);
+    }
+  }, [urlMode, displayMode, setDisplayMode]);
+
+  const handleSetDisplayMode = useCallback(
+    (mode: PhotosDisplayMode) => {
+      setDisplayMode(mode);
+      const nextParams = new URLSearchParams(params);
+      if (mode === "photos") {
+        nextParams.set("view", "photos");
+      } else {
+        nextParams.delete("view");
+        nextParams.delete("mode");
+      }
+      setParams(nextParams, { replace: true });
+    },
+    [params, setParams, setDisplayMode]
+  );
 
   const isAlbumsMode = displayMode === "albums" && !tag;
 
@@ -119,6 +145,8 @@ export default function PhotosPage() {
       const nextParams = new URLSearchParams(params);
       if (newTag) {
         nextParams.set("tag", newTag);
+        nextParams.delete("view");
+        nextParams.delete("mode");
       } else {
         nextParams.delete("tag");
       }
@@ -182,7 +210,7 @@ export default function PhotosPage() {
     total,
     albums,
     displayMode,
-    setDisplayMode,
+    setDisplayMode: handleSetDisplayMode,
     hasMore,
     loadingMore,
     initialLoading,

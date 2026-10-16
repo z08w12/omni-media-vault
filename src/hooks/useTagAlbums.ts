@@ -17,28 +17,25 @@ export type PhotosDisplayMode = "albums" | "photos";
 const STORAGE_KEY_PHOTOS_VIEW = "omv_photos_view_mode";
 
 export function useTagAlbums(_items?: VideoItem[]) {
-  const [displayMode, setDisplayModeState] = useState<PhotosDisplayMode>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PHOTOS_VIEW);
-      if (saved === "albums" || saved === "photos") return saved;
-    } catch {
-      // ignore
-    }
-    return "albums";
-  });
+  // 进入图集始终默认展示 "albums"（标签相册）
+  const [displayMode, setDisplayModeState] = useState<PhotosDisplayMode>("albums");
 
   const [albums, setAlbums] = useState<TagAlbum[]>([]);
   const [loadingAlbums, setLoadingAlbums] = useState(false);
   const [albumsError, setAlbumsError] = useState<string | null>(null);
 
-  const setDisplayMode = (mode: PhotosDisplayMode) => {
-    setDisplayModeState(mode);
+  // 清除旧版本本地存储中可能持久化的 "photos" 模式，避免用户设备被历史缓存劫持
+  useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_PHOTOS_VIEW, mode);
+      localStorage.removeItem(STORAGE_KEY_PHOTOS_VIEW);
     } catch {
       // ignore
     }
-  };
+  }, []);
+
+  const setDisplayMode = useCallback((mode: PhotosDisplayMode) => {
+    setDisplayModeState(mode);
+  }, []);
 
   const loadServerAlbums = useCallback(async () => {
     setLoadingAlbums(true);
