@@ -144,37 +144,8 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
           )}
 
           <main id="main-content" className="photos-main" tabIndex={-1}>
-            {initialLoading ? (
-              <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "80px 0" }}>
-                <span className="preview-loader" style={{ margin: "0 auto 16px auto" }} />
-                <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "14px" }}>
-                  正在加载照片图集...
-                </p>
-              </div>
-            ) : failed && items.length === 0 ? (
-              <div className="photos-error-state" style={{ textAlign: "center", padding: "60px 0" }}>
-                <p style={{ color: "#f87171", fontSize: "15px", marginBottom: "16px" }}>
-                  {error || "照片图集加载失败，请检查网络连接"}
-                </p>
-                {onReload && (
-                  <button
-                    type="button"
-                    className="admin-btn admin-btn--primary"
-                    onClick={onReload}
-                    style={{ padding: "8px 20px" }}
-                  >
-                    重新加载
-                  </button>
-                )}
-              </div>
-            ) : items.length === 0 ? (
-              <div className="photos-empty" style={{ textAlign: "center", padding: "60px 0" }}>
-                <p style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: "15px" }}>
-                  暂无匹配的照片图集
-                </p>
-              </div>
-            ) : displayMode === "albums" && !tag ? (
-              /* Tag Albums Grid */
+            {displayMode === "albums" && !tag ? (
+              /* 1. 标签相册列表模式（一次性全量加载完成，独立于单图瀑布流分页） */
               loadingAlbums && albums.length === 0 ? (
                 <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "80px 0" }}>
                   <span className="preview-loader" style={{ margin: "0 auto 16px auto" }} />
@@ -198,56 +169,98 @@ export const DesktopPhotosView = memo(function DesktopPhotosView({
                     </button>
                   )}
                 </div>
-              ) : (
-                <div className="tag-albums-grid">
-                  {albums.map((album) => (
-                    <TagAlbumCard
-                      key={album.tag}
-                      album={album}
-                      onOpenAlbum={handleOpenAlbum}
-                      onSelectTag={onSelectTag}
-                    />
-                  ))}
+              ) : albums.length === 0 ? (
+                <div className="photos-empty" style={{ textAlign: "center", padding: "60px 0" }}>
+                  <p style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: "15px" }}>
+                    暂无主题相册
+                  </p>
                 </div>
+              ) : (
+                <>
+                  <div className="tag-albums-grid">
+                    {albums.map((album) => (
+                      <TagAlbumCard
+                        key={album.tag}
+                        album={album}
+                        onOpenAlbum={handleOpenAlbum}
+                        onSelectTag={onSelectTag}
+                      />
+                    ))}
+                  </div>
+                  <InfiniteFeedStatus state="end" />
+                </>
               )
             ) : (
-              /* Staggered Masonry Waterfall Grid */
-              <MasonryGrid
-                items={items}
-                isMobile={false}
-                onOpenPhoto={handleOpenSinglePhoto}
-              />
-            )}
+              /* 2. 单张照片瀑布流模式（支持无限滚动与哨兵加载） */
+              <>
+                {initialLoading && items.length === 0 ? (
+                  <div className="photos-loading-skeleton" style={{ textAlign: "center", padding: "80px 0" }}>
+                    <span className="preview-loader" style={{ margin: "0 auto 16px auto" }} />
+                    <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "14px" }}>
+                      正在加载照片图集...
+                    </p>
+                  </div>
+                ) : failed && items.length === 0 ? (
+                  <div className="photos-error-state" style={{ textAlign: "center", padding: "60px 0" }}>
+                    <p style={{ color: "#f87171", fontSize: "15px", marginBottom: "16px" }}>
+                      {error || "照片图集加载失败，请检查网络连接"}
+                    </p>
+                    {onReload && (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--primary"
+                        onClick={onReload}
+                        style={{ padding: "8px 20px" }}
+                      >
+                        重新加载
+                      </button>
+                    )}
+                  </div>
+                ) : items.length === 0 ? (
+                  <div className="photos-empty" style={{ textAlign: "center", padding: "60px 0" }}>
+                    <p style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: "15px" }}>
+                      暂无匹配的照片图集
+                    </p>
+                  </div>
+                ) : (
+                  <MasonryGrid
+                    items={items}
+                    isMobile={false}
+                    onOpenPhoto={handleOpenSinglePhoto}
+                  />
+                )}
 
-            <div
-              ref={onSetSentinel}
-              className="photos-sentinel"
-              style={{ height: "20px" }}
-              aria-hidden="true"
-            />
+                <div
+                  ref={onSetSentinel}
+                  className="photos-sentinel"
+                  style={{ height: "20px" }}
+                  aria-hidden="true"
+                />
 
-            {loadingMore && <InfiniteFeedStatus state="loading" />}
-            {failed && items.length > 0 && (
-              <div style={{ textAlign: "center", padding: "16px 0" }}>
-                <button
-                  type="button"
-                  className="admin-btn"
-                  onClick={onRetry}
-                  style={{
-                    background: "rgba(255, 255, 255, 0.08)",
-                    border: "1px solid rgba(255, 255, 255, 0.2)",
-                    color: "#fff",
-                    padding: "6px 16px",
-                    borderRadius: "6px",
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  下一页加载失败，点击重试
-                </button>
-              </div>
+                {loadingMore && <InfiniteFeedStatus state="loading" />}
+                {failed && items.length > 0 && (
+                  <div style={{ textAlign: "center", padding: "16px 0" }}>
+                    <button
+                      type="button"
+                      className="admin-btn"
+                      onClick={onRetry}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.08)",
+                        border: "1px solid rgba(255, 255, 255, 0.2)",
+                        color: "#fff",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      下一页加载失败，点击重试
+                    </button>
+                  </div>
+                )}
+                {!hasMore && items.length > 0 && <InfiniteFeedStatus state="end" />}
+              </>
             )}
-            {!hasMore && items.length > 0 && <InfiniteFeedStatus state="end" />}
           </main>
         </div>
       </div>

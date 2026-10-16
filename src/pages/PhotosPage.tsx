@@ -32,6 +32,18 @@ export default function PhotosPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [currentSlides, setCurrentSlides] = useState<PhotoSlide[]>([]);
 
+  // Tag album aggregation
+  const {
+    albums,
+    loadingAlbums,
+    albumsError,
+    reloadAlbums,
+    displayMode,
+    setDisplayMode,
+  } = useTagAlbums();
+
+  const isAlbumsMode = displayMode === "albums" && !tag;
+
   const source = useMemo(
     () => photosFeedSource({ q: keyword, tag, sort, pageSize }),
     [keyword, tag, sort, pageSize]
@@ -44,7 +56,7 @@ export default function PhotosPage() {
     pageSize,
   });
   const listing = useInfiniteListing(source, {
-    pausePagination: !routeActive,
+    pausePagination: !routeActive || isAlbumsMode,
     restoreCount: restoreTarget.count,
     restoreFeedToken: restoreTarget.feedToken,
   });
@@ -54,7 +66,7 @@ export default function PhotosPage() {
     requestedCount: listing.requestedCount,
     feedToken: listing.feedToken,
     itemCount: listing.items.length,
-    active: routeActive,
+    active: routeActive && !isAlbumsMode,
   });
 
   const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
@@ -68,19 +80,9 @@ export default function PhotosPage() {
   const loadMore = listing.loadMore;
   const items = listing.items;
 
-  // Tag album aggregation
-  const {
-    albums,
-    loadingAlbums,
-    albumsError,
-    reloadAlbums,
-    displayMode,
-    setDisplayMode,
-  } = useTagAlbums(items);
-
   // 1. IntersectionObserver bottom trigger
   useEffect(() => {
-    if (!sentinelEl || !hasMore || loadingMore || !routeActive) return;
+    if (!sentinelEl || !hasMore || loadingMore || !routeActive || isAlbumsMode) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -91,14 +93,14 @@ export default function PhotosPage() {
     );
     observer.observe(sentinelEl);
     return () => observer.disconnect();
-  }, [sentinelEl, hasMore, loadingMore, loadMore, routeActive]);
+  }, [sentinelEl, hasMore, loadingMore, loadMore, routeActive, isAlbumsMode]);
 
   // 2. Window scroll bottom trigger fallback
   useEffect(() => {
-    if (!routeActive || !hasMore || loadingMore) return;
+    if (!routeActive || !hasMore || loadingMore || isAlbumsMode) return;
 
     const checkAndLoadMore = () => {
-      if (!hasMore || loadingMore) return;
+      if (!hasMore || loadingMore || isAlbumsMode) return;
       const scrollHeight = document.documentElement.scrollHeight;
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
       const clientHeight = window.innerHeight;
@@ -109,7 +111,7 @@ export default function PhotosPage() {
 
     window.addEventListener("scroll", checkAndLoadMore, { passive: true });
     return () => window.removeEventListener("scroll", checkAndLoadMore);
-  }, [hasMore, loadingMore, loadMore, routeActive]);
+  }, [hasMore, loadingMore, loadMore, routeActive, isAlbumsMode]);
 
   const handleSelectTag = useCallback(
     (newTag: string) => {
