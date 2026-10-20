@@ -24,14 +24,48 @@ func TestCheckCompatibility(t *testing.T) {
 			compatible: true,
 		},
 		{
-			name:   "Standard WebM with VP9 and Opus",
+			name:   "WebM container requires transcode for iOS/Safari compatibility",
 			format: "matroska,webm",
 			ext:    "webm",
 			streams: []StreamInfo{
 				{CodecType: "video", CodecName: "vp9", PixFmt: "yuv420p"},
 				{CodecType: "audio", CodecName: "opus"},
 			},
-			compatible: true,
+			compatible: false,
+			hasReason:  true,
+		},
+		{
+			name:   "AV1 in MP4 requires transcode for mobile compatibility",
+			format: "mov,mp4,m4a,3gp,3g2,mj2",
+			ext:    "mp4",
+			streams: []StreamInfo{
+				{CodecType: "video", CodecName: "av1", PixFmt: "yuv420p"},
+				{CodecType: "audio", CodecName: "aac"},
+			},
+			compatible: false,
+			hasReason:  true,
+		},
+		{
+			name:   "VP9 in MP4 requires transcode for mobile compatibility",
+			format: "mov,mp4,m4a,3gp,3g2,mj2",
+			ext:    "mp4",
+			streams: []StreamInfo{
+				{CodecType: "video", CodecName: "vp9", PixFmt: "yuv420p"},
+				{CodecType: "audio", CodecName: "aac"},
+			},
+			compatible: false,
+			hasReason:  true,
+		},
+		{
+			name:   "Opus audio in MP4 requires transcode for iOS compatibility",
+			format: "mov,mp4,m4a,3gp,3g2,mj2",
+			ext:    "mp4",
+			streams: []StreamInfo{
+				{CodecType: "video", CodecName: "h264", PixFmt: "yuv420p"},
+				{CodecType: "audio", CodecName: "opus"},
+			},
+			compatible: false,
+			hasReason:  true,
 		},
 		{
 			name:   "MKV container requires transcode",

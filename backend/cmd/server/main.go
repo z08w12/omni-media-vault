@@ -293,6 +293,7 @@ func main() {
 	})
 	defer transcodeService.Close()
 	app.transcodeService = transcodeService
+	go app.reconcileCompatibilityTranscodes(ctx)
 
 	apiServer := &api.Server{
 		Catalog:        cat,

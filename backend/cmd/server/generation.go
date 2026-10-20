@@ -416,3 +416,34 @@ func shouldScanDrive(d drives.Drive) bool {
 	}
 	return true
 }
+
+func (a *App) reconcileCompatibilityTranscodes(ctx context.Context) {
+	if a.transcodeService == nil {
+		return
+	}
+	time.Sleep(3 * time.Second)
+	items, _, err := a.cat.ListVideos(ctx, catalog.ListParams{
+		Page:     1,
+		PageSize: 1000,
+	})
+	if err != nil {
+		log.Printf("[transcode-reconcile] list videos error: %v", err)
+		return
+	}
+	for _, item := range items {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if item.MediaKind == "image" || !transcode.IsSupportedLocalDrive(item.DriveID) {
+			continue
+		}
+		enqueued, reason, err := a.transcodeService.CheckAndEnqueue(ctx, item.ID)
+		if err != nil {
+			log.Printf("[transcode-reconcile] probe error for %s: %v", item.ID, err)
+		} else if enqueued {
+			log.Printf("[transcode-reconcile] auto-enqueued video %s (%s): %s", item.ID, item.Title, reason)
+		}
+	}
+}

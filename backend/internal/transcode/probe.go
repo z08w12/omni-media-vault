@@ -96,12 +96,16 @@ func CheckCompatibility(info *MediaProbeInfo, fileExt string) CompatibilityResul
 		return CompatibilityResult{Compatible: true}
 	}
 
-	// 2. Container check: only mp4, m4v, webm are universally supported web video containers
+	// 2. Container check: only mp4 and m4v are universally supported web video containers across mobile (iOS/Android) and desktop
 	switch ext {
 	case "mp4", "m4v":
-		// Allowed container, verify inner stream codecs below
+		// Allowed universal container, verify inner stream codecs below
 	case "webm":
-		// Allowed container, verify inner stream codecs below
+		// WebM container is not supported natively by Apple iOS Safari HTML5 video playback
+		return CompatibilityResult{
+			Compatible: false,
+			Reason:     "container format 'webm' is not natively supported on iOS/Safari browsers",
+		}
 	default:
 		// mkv, avi, wmv, flv, mov, rmvb, ts, 3gp, asf etc. require transcode/remux
 		return CompatibilityResult{
@@ -125,9 +129,18 @@ func CheckCompatibility(info *MediaProbeInfo, fileExt string) CompatibilityResul
 			hasAudio = true
 			codec := strings.ToLower(strings.TrimSpace(s.CodecName))
 			switch codec {
-			case "aac", "mp3", "opus", "vorbis", "":
-				// Compatible web audio codecs
+			case "aac", "mp3":
+				// Universally compatible web audio codecs
+			case "opus", "vorbis":
+				// Opus/Vorbis inside MP4 is rejected by Apple iOS AVFoundation/Safari
+				if unsupportedAudioCodec == "" {
+					unsupportedAudioCodec = fmt.Sprintf("%s in MP4 container (unsupported on iOS/Safari)", codec)
+				}
 			case "dts", "ac3", "eac3", "truehd", "mlp", "flac":
+				if unsupportedAudioCodec == "" {
+					unsupportedAudioCodec = codec
+				}
+			default:
 				if unsupportedAudioCodec == "" {
 					unsupportedAudioCodec = codec
 				}
@@ -156,13 +169,17 @@ func CheckCompatibility(info *MediaProbeInfo, fileExt string) CompatibilityResul
 				Reason:     fmt.Sprintf("H.264 with pixel format '%s' (10-bit/high-depth) causes black screen on most browsers", pixFmt),
 			}
 		}
-	case "vp8", "vp9", "av01", "av1":
-		// WebM / modern AV1
-		if ext != "webm" && ext != "mp4" {
-			return CompatibilityResult{
-				Compatible: false,
-				Reason:     fmt.Sprintf("video codec '%s' in container '%s' is not universally supported", vCodec, ext),
-			}
+	case "av01", "av1":
+		// AV1 lacks hardware decoding on most mobile devices (iPhone 14 and below, iOS Safari, non-flagship Androids)
+		return CompatibilityResult{
+			Compatible: false,
+			Reason:     "video codec 'av1' lacks hardware decode support on most mobile devices (causes black screen or playback failure on iOS/Safari)",
+		}
+	case "vp8", "vp9":
+		// VP8/VP9 in MP4 is rejected by iOS Safari WebKit and many mobile hardware decoders
+		return CompatibilityResult{
+			Compatible: false,
+			Reason:     fmt.Sprintf("video codec '%s' is not universally supported on mobile browsers (especially iOS/Safari)", vCodec),
 		}
 	case "hevc", "h265":
 		// HEVC / H.265 in MP4 lacks hardware/software decode support in many Chrome/Windows/Android setups
@@ -181,7 +198,7 @@ func CheckCompatibility(info *MediaProbeInfo, fileExt string) CompatibilityResul
 	if hasAudio && unsupportedAudioCodec != "" {
 		return CompatibilityResult{
 			Compatible: false,
-			Reason:     fmt.Sprintf("audio codec '%s' lacks native decode in web browsers (causes video without sound)", unsupportedAudioCodec),
+			Reason:     fmt.Sprintf("audio codec '%s' lacks native decode in web browsers (causes video without sound or decode error)", unsupportedAudioCodec),
 		}
 	}
 

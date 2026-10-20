@@ -579,7 +579,9 @@ func DownloadVideoWithProgress(ctx context.Context, videoURL, jobDir string, max
 	outTmpl := filepath.Join(jobDir, "%(id)s.%(ext)s")
 
 	args := []string{
-		"-f", "bestvideo*+bestaudio/best",
+		// 优先选择兼容性最佳的 H.264 (AVC1) + AAC (M4A) 流组合（绝大多数平台/YouTube 原生提供），
+		// 免去耗时的二次软解转码；若源站仅有 AV1/VP9/无独立流则降级获取最高画质流后交由后端自动转码。
+		"-f", "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[acodec^=mp4a][ext=m4a]/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo*+bestaudio/best",
 		"--merge-output-format", "mp4",
 		"-o", outTmpl,
 		"--no-playlist",
