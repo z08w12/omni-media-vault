@@ -19,17 +19,18 @@ import (
 // Integration consumes the validated YAML snapshot and replaces receiver sessions.
 // The Bot API server is an independently managed HTTP service.
 type Integration struct {
-	cat           *catalog.Catalog
-	configManager *config.Manager
-	uploadDir     string
-	reserve       int64
-	mu            sync.RWMutex
-	active        *Service
-	status        Status
-	version       string
-	wake          func()
-	cancel        context.CancelFunc
-	done          chan struct{}
+	cat             *catalog.Catalog
+	configManager   *config.Manager
+	uploadDir       string
+	reserve         int64
+	mu              sync.RWMutex
+	active          *Service
+	status          Status
+	version         string
+	wake            func()
+	onVideoUploaded func(v *catalog.Video)
+	cancel          context.CancelFunc
+	done            chan struct{}
 }
 
 func NewIntegration(cat *catalog.Catalog, manager *config.Manager, uploadDir string, reserve int64) *Integration {
@@ -38,6 +39,15 @@ func NewIntegration(cat *catalog.Catalog, manager *config.Manager, uploadDir str
 		status: Status{State: "disabled", Config: cfg}}
 }
 func (i *Integration) SetWake(wake func()) { i.mu.Lock(); i.wake = wake; i.mu.Unlock() }
+func (i *Integration) SetOnVideoUploaded(fn func(v *catalog.Video)) {
+	i.mu.Lock()
+	i.onVideoUploaded = fn
+	s := i.active
+	i.mu.Unlock()
+	if s != nil {
+		s.SetOnVideoUploaded(fn)
+	}
+}
 func (i *Integration) Start(ctx context.Context) {
 	ctx, i.cancel = context.WithCancel(ctx)
 	i.done = make(chan struct{})
@@ -182,8 +192,10 @@ func (i *Integration) reconcile(ctx context.Context) {
 		s.statusReserve = func() int64 { return i.diskReserve() }
 		i.mu.RLock()
 		wake := i.wake
+		onUploaded := i.onVideoUploaded
 		i.mu.RUnlock()
 		s.SetWake(wake)
+		s.SetOnVideoUploaded(onUploaded)
 		s.setState("connecting", nil)
 		s.Start(ctx)
 		i.mu.Lock()

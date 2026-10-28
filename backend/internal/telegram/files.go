@@ -210,7 +210,12 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 						break
 					}
 				}
-				finalTitle = fmt.Sprintf("%s - %d", dlResult.Title, primaryIdx)
+				primaryBase := strings.TrimSuffix(primaryItem.Filename, filepath.Ext(primaryItem.Filename))
+				if primaryBase != "" && !strings.HasPrefix(primaryBase, "tg_") {
+					finalTitle = fmt.Sprintf("%s - %s", dlResult.Title, primaryBase)
+				} else {
+					finalTitle = fmt.Sprintf("%s - %d", dlResult.Title, primaryIdx)
+				}
 			}
 			if finalTitle != "" {
 				j.RequestedTitle = finalTitle
@@ -239,7 +244,11 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 						continue
 					}
 					extraIndex := i + 1
+					extraBase := strings.TrimSuffix(extra.Filename, filepath.Ext(extra.Filename))
 					extraTitle := fmt.Sprintf("%s - %d", dlResult.Title, extraIndex)
+					if extraBase != "" && !strings.HasPrefix(extraBase, "tg_") {
+						extraTitle = fmt.Sprintf("%s - %s", dlResult.Title, extraBase)
+					}
 					extraExt := filepath.Ext(extra.Filename)
 					if extraExt == "" {
 						if extra.IsPhoto {
@@ -304,6 +313,18 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 								thumbnailURL = "/p/thumb/" + extraVideoID
 							}
 						}
+						// 若主文件为视频且尚未生成封面，复制该贴图作为主视频的封面
+						if !primaryItem.IsPhoto {
+							primaryVideoID := telegramstorage.DriveID + "-" + j.ID
+							primaryThumbDst := mediaasset.ThumbnailPath(previewDir, primaryVideoID)
+							if _, statErr := os.Stat(primaryThumbDst); os.IsNotExist(statErr) {
+								if linkErr := os.Link(extraDest, primaryThumbDst); linkErr != nil {
+									if data, readErr := os.ReadFile(extraDest); readErr == nil {
+										_ = os.WriteFile(primaryThumbDst, data, 0644)
+									}
+								}
+							}
+						}
 					}
 					now := time.Now()
 					extraVideo := &catalog.Video{
@@ -325,6 +346,12 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 					if err := s.cat.UpsertVideo(ctx, extraVideo); err == nil {
 						extraUniqueID := fmt.Sprintf("tg:%s/%d", channel, extra.ID)
 						_ = s.cat.LinkTelegramVideo(ctx, s.BotID(), extraUniqueID, extraFileID, j.ID, extraVideoID)
+						s.mu.RLock()
+						notifyFn := s.onVideoUploaded
+						s.mu.RUnlock()
+						if notifyFn != nil {
+							notifyFn(extraVideo)
+						}
 					}
 				}
 			}

@@ -236,6 +236,9 @@ func main() {
 		log.Fatalf("start remote upload: %v", err)
 	}
 	telegramService.SetWake(remoteUploader.Wake)
+	telegramService.SetOnVideoUploaded(func(v *catalog.Video) {
+		app.enqueueUploadedVideo(ctx, v)
+	})
 	telegramService.Start(ctx)
 
 	authr := &auth.Authenticator{Catalog: cat}

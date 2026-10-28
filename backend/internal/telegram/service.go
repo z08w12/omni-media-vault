@@ -38,6 +38,7 @@ type Status struct {
 }
 type Service struct {
 	wakeImports      func()
+	onVideoUploaded  func(v *catalog.Video)
 	statusTimezone   func() string // Optional live timezone provider, assigned before Start.
 	statusReserve    func() int64  // Optional live disk reserve provider.
 	cfg              config.Telegram
@@ -71,6 +72,11 @@ func New(cfg config.Telegram, token string, cat *catalog.Catalog, uploadDir stri
 	}
 }
 func (s *Service) SetWake(wake func()) { s.mu.Lock(); s.wakeImports = wake; s.mu.Unlock() }
+func (s *Service) SetOnVideoUploaded(fn func(v *catalog.Video)) {
+	s.mu.Lock()
+	s.onVideoUploaded = fn
+	s.mu.Unlock()
+}
 
 func (s *Service) Start(ctx context.Context) {
 	if !s.cfg.Enabled {
@@ -397,6 +403,36 @@ func (s *Service) prepareImport(ctx context.Context, u update) (catalog.Telegram
 						title = link.Platform + "-" + link.ID
 						tags = append([]string{link.Platform}, ytdlp.ExtractHashtags(allText)...)
 					}
+				} else if channel, msgID, isChannel := extractForwardChannelPost(m); isChannel && s.cfg.UserClientEnabled {
+					channelSlug := channel
+					url := fmt.Sprintf("https://t.me/%s/%d", channel, msgID)
+					uniqueID := fmt.Sprintf("tg:%s_%d", channel, msgID)
+					if strings.HasPrefix(channel, "-100") {
+						rawID := strings.TrimPrefix(channel, "-100")
+						channelSlug = "c_" + rawID
+						url = fmt.Sprintf("https://t.me/c/%s/%d", rawID, msgID)
+						uniqueID = fmt.Sprintf("tg:c_%s_%d", rawID, msgID)
+					}
+					if existingID, err := s.cat.TelegramVideoID(ctx, botID, uniqueID); err == nil && existingID != "" {
+						r.Response = "✅ 这个 Telegram 频道帖子已经转存过"
+					} else {
+						r.Response = ""
+						source = &catalog.TelegramSource{
+							BotID:    botID,
+							SenderID: m.From.ID,
+							FileID:   uniqueID,
+							UniqueID: uniqueID,
+							FileName: url,
+							Size:     0,
+							MIME:     "video/mp4",
+						}
+						postTitle := videoTitle(m.Caption, "", m.Date)
+						if postTitle == "" {
+							postTitle = "Telegram-" + channelSlug + "-" + strconv.FormatInt(msgID, 10)
+						}
+						title = postTitle
+						tags = append([]string{"Telegram"}, ytdlp.ExtractHashtags(m.Caption)...)
+					}
 				} else {
 					file := videoMedia(m)
 					isPhoto := false
@@ -529,6 +565,31 @@ func photoMedia(m *message) *media {
 		return m.Document
 	}
 	return nil
+}
+
+func extractForwardChannelPost(m *message) (channel string, msgID int64, isChannel bool) {
+	if m == nil {
+		return "", 0, false
+	}
+	// 1. Telegram Bot API 7.0+ forward_origin
+	if m.ForwardOrigin != nil {
+		if (m.ForwardOrigin.Type == "channel" || m.ForwardOrigin.Type == "chat") && m.ForwardOrigin.Chat != nil && m.ForwardOrigin.MessageID > 0 {
+			ch := m.ForwardOrigin.Chat
+			if ch.Username != "" {
+				return ch.Username, m.ForwardOrigin.MessageID, true
+			}
+			return strconv.FormatInt(ch.ID, 10), m.ForwardOrigin.MessageID, true
+		}
+	}
+	// 2. Legacy forward_from_chat
+	if m.ForwardFromChat != nil && m.ForwardFromMessageID > 0 {
+		ch := m.ForwardFromChat
+		if ch.Username != "" {
+			return ch.Username, m.ForwardFromMessageID, true
+		}
+		return strconv.FormatInt(ch.ID, 10), m.ForwardFromMessageID, true
+	}
+	return "", 0, false
 }
 func videoTitle(caption, name string, timestamp int64) string {
 	return videoTitleWithSuffix(caption, name, timestamp, "")

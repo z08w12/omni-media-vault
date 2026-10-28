@@ -538,3 +538,75 @@ func TestAcceptTelegramChannelPost(t *testing.T) {
 	}
 }
 
+func TestAcceptForwardedChannelPost(t *testing.T) {
+	s, cat := testService(t)
+	s.cfg.UserClientEnabled = true
+	ctx := context.Background()
+
+	// 模拟 Bot API 7.0+ 转发频道帖子
+	m1 := &message{
+		ID:   21,
+		Date: 1789975385,
+		From: user{ID: 42},
+		Chat: struct {
+			ID   int64  `json:"id"`
+			Type string `json:"type"`
+		}{ID: 42, Type: "private"},
+		Caption: "#北北学姐 #美腿 极品流出",
+		ForwardOrigin: &messageOrigin{
+			Type:      "channel",
+			MessageID: 837,
+			Chat: &chatInfo{
+				ID:       -1003537976891,
+				Type:     "channel",
+				Title:    "极品汇总",
+				Username: "crds555",
+			},
+		},
+		Photo: []media{{FileID: "photo1", UniqueID: "uphoto1", Name: "photo.jpg", MIME: "image/jpeg", Size: 1000}},
+	}
+	u1 := update{ID: 11, Message: m1}
+	if err := s.accept(ctx, u1); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, err := cat.ListImportJobs(ctx, "telegram", "", 0, 30)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs=%v err=%v", jobs, err)
+	}
+	if jobs[0].SourceLabel != "Telegram" {
+		t.Fatalf("expected SourceLabel Telegram, got %q", jobs[0].SourceLabel)
+	}
+	if jobs[0].RequestedTitle != "#北北学姐 #美腿 极品流出" {
+		t.Fatalf("expected RequestedTitle from caption, got %q", jobs[0].RequestedTitle)
+	}
+	if len(jobs[0].Tags) < 3 {
+		t.Fatalf("expected at least 3 tags, got %v", jobs[0].Tags)
+	}
+
+	// 模拟重复转发同一频道帖子，触发幂等防护
+	m2 := &message{
+		ID:   22,
+		Date: 1789975386,
+		From: user{ID: 42},
+		Chat: struct {
+			ID   int64  `json:"id"`
+			Type string `json:"type"`
+		}{ID: 42, Type: "private"},
+		ForwardFromChat: &chatInfo{
+			ID:       -1003537976891,
+			Type:     "channel",
+			Username: "crds555",
+		},
+		ForwardFromMessageID: 837,
+	}
+	u2 := update{ID: 12, Message: m2}
+	if err := s.accept(ctx, u2); err != nil {
+		t.Fatal(err)
+	}
+	jobsAfter, err := cat.ListImportJobs(ctx, "telegram", "", 0, 30)
+	if err != nil || len(jobsAfter) != 1 {
+		t.Fatalf("expected 1 job after duplicate, got %d", len(jobsAfter))
+	}
+}
+

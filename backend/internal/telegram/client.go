@@ -86,6 +86,22 @@ type user struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 }
+type chatInfo struct {
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+type messageOrigin struct {
+	Type            string    `json:"type"` // "user", "hidden_user", "chat", "channel"
+	Date            int64     `json:"date"`
+	Chat            *chatInfo `json:"chat,omitempty"`
+	MessageID       int64     `json:"message_id,omitempty"`
+	SenderUser      *user     `json:"sender_user,omitempty"`
+	SenderUserName  string    `json:"sender_user_name,omitempty"`
+	SenderChat      *chatInfo `json:"sender_chat,omitempty"`
+	AuthorSignature string    `json:"author_signature,omitempty"`
+}
 type media struct {
 	FileID   string `json:"file_id"`
 	UniqueID string `json:"file_unique_id"`
@@ -101,12 +117,16 @@ type message struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
 	} `json:"chat"`
-	Text         string  `json:"text"`
-	Caption      string  `json:"caption"`
-	MediaGroupID string  `json:"media_group_id"`
-	Photo        []media `json:"photo,omitempty"`
-	Video        *media  `json:"video"`
-	Document     *media  `json:"document"`
+	ForwardOrigin        *messageOrigin `json:"forward_origin,omitempty"`
+	ForwardFromChat      *chatInfo      `json:"forward_from_chat,omitempty"`
+	ForwardFromMessageID int64          `json:"forward_from_message_id,omitempty"`
+	ForwardDate          int64          `json:"forward_date,omitempty"`
+	Text                 string         `json:"text"`
+	Caption              string         `json:"caption"`
+	MediaGroupID         string         `json:"media_group_id"`
+	Photo                []media        `json:"photo,omitempty"`
+	Video                *media         `json:"video"`
+	Document             *media         `json:"document"`
 }
 type update struct {
 	ID      int64    `json:"update_id"`

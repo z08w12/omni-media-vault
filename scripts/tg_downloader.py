@@ -16,7 +16,7 @@ import sys
 import time
 
 try:
-    from telethon import TelegramClient, errors
+    from telethon import TelegramClient, errors, functions
     from telethon.sessions import StringSession
 except ImportError:
     print(json.dumps({
@@ -200,19 +200,25 @@ async def do_download(args):
             sys.exit(1)
 
         # Parse channel / entity
-        entity_key = channel_input
-        if entity_key.startswith("-100") or entity_key.isdigit() or (entity_key.startswith("-") and entity_key[1:].isdigit()):
-            entity_key = int(entity_key)
-
+        entity = None
         try:
+            entity_key = channel_input
+            if entity_key.startswith("-100") or entity_key.isdigit() or (entity_key.startswith("-") and entity_key[1:].isdigit()):
+                entity_key = int(entity_key)
             entity = await client.get_entity(entity_key)
         except Exception as e:
-            await client.disconnect()
-            print(json.dumps({
-                "type": "error",
-                "message": f"无法获取频道/群组 [{channel_input}]: {str(e)}"
-            }), flush=True)
-            sys.exit(1)
+            if str(channel_input).isdigit() and not str(channel_input).startswith("-"):
+                try:
+                    entity = await client.get_entity(int(f"-100{channel_input}"))
+                except Exception:
+                    pass
+            if not entity:
+                await client.disconnect()
+                print(json.dumps({
+                    "type": "error",
+                    "message": f"无法获取频道/群组 [{channel_input}]: {str(e)}"
+                }), flush=True)
+                sys.exit(1)
 
         try:
             msg = await client.get_messages(entity, ids=msg_id)
@@ -232,42 +238,96 @@ async def do_download(args):
             }), flush=True)
             sys.exit(1)
 
-        # 检查是否属于相册 (Media Group / Album)
-        album_msgs = []
+        # 1. 检查帖子本身是否为媒体或相册 (Media Group / Album)
+        post_media_msgs = []
         grouped_id = getattr(msg, "grouped_id", None)
         if grouped_id:
             try:
                 candidate_ids = list(range(max(1, msg_id - 10), msg_id + 11))
                 surrounding = await client.get_messages(entity, ids=candidate_ids)
-                album_msgs = [
+                post_media_msgs = [
                     m for m in surrounding
                     if m and getattr(m, "grouped_id", None) == grouped_id and getattr(m, "media", None)
                 ]
             except Exception:
-                album_msgs = []
+                post_media_msgs = []
 
-        if not album_msgs:
-            if getattr(msg, "media", None):
-                album_msgs = [msg]
+        if not post_media_msgs and getattr(msg, "media", None):
+            post_media_msgs = [msg]
 
-        if not album_msgs:
+        post_media_msgs.sort(key=lambda x: x.id)
+
+        # 2. 检查关联讨论组 / 评论区 (Discussion Group / Comments) 中的视频
+        comment_video_msgs = []
+        try:
+            discussion = await client(functions.messages.GetDiscussionMessageRequest(
+                peer=entity,
+                msg_id=msg_id
+            ))
+            if discussion and discussion.messages and discussion.chats:
+                top_msg = discussion.messages[0]
+                discussion_group = discussion.chats[0]
+                # 遍历评论区回复（通常视频在最新的若干条回复中，取前100条）
+                replies = await client.get_messages(discussion_group, reply_to=top_msg.id, limit=100)
+                for r in replies:
+                    if not r or not getattr(r, "media", None):
+                        continue
+                    is_vid = False
+                    if getattr(r, "video", None):
+                        is_vid = True
+                    elif getattr(r, "document", None):
+                        mime = getattr(getattr(r, "file", None), "mime_type", "") or ""
+                        name = (getattr(getattr(r, "file", None), "name", "") or "").lower()
+                        if mime.startswith("video/") or name.endswith(('.mp4', '.mkv', '.mov', '.webm', '.avi', '.ts', '.flv')):
+                            is_vid = True
+                    if is_vid:
+                        comment_video_msgs.append(r)
+        except Exception:
+            comment_video_msgs = []
+
+        # 按消息编号正序排列（保证多集视频按自然发送顺序排列）
+        comment_video_msgs.sort(key=lambda x: x.id)
+
+        # 3. 确定最终下载的目标消息列表 targets
+        # - 如果评论区有视频：优先下载评论区视频；若主帖自身也有视频，一并下载；若主帖只有封面图，带上该图作为封面
+        # - 如果评论区无视频：直接下载主帖自身媒体
+        targets = []
+        if comment_video_msgs:
+            for pm in post_media_msgs:
+                is_pm_vid = False
+                if getattr(pm, "video", None):
+                    is_pm_vid = True
+                elif getattr(pm, "document", None):
+                    mime = getattr(getattr(pm, "file", None), "mime_type", "") or ""
+                    name = (getattr(getattr(pm, "file", None), "name", "") or "").lower()
+                    if mime.startswith("video/") or name.endswith(('.mp4', '.mkv', '.mov', '.webm', '.avi', '.ts', '.flv')):
+                        is_pm_vid = True
+                if is_pm_vid:
+                    targets.append(pm)
+            targets.extend(comment_video_msgs)
+            for pm in post_media_msgs:
+                if getattr(pm, "photo", None):
+                    targets.append(pm)
+                    break
+        else:
+            targets = list(post_media_msgs)
+
+        if not targets:
             await client.disconnect()
             print(json.dumps({
                 "type": "error",
-                "message": f"消息 [ID: {msg_id}] 不包含视频或图片等媒体内容"
+                "message": f"消息 [ID: {msg_id}] 及其留言评论区均不包含视频或媒体内容"
             }), flush=True)
             sys.exit(1)
 
-        # 按消息编号正序排列
-        album_msgs.sort(key=lambda x: x.id)
-
-        # 提取标题和标签（相册内通常只有一条消息带有 caption）
+        # 提取标题和标签（优先从主消息提取，主消息通常包含完整的标题介绍和 #标签）
         caption = ""
-        for m in album_msgs:
-            c = m.message or m.text or ""
-            if c.strip():
-                caption = c.strip()
-                break
+        for m in [msg] + post_media_msgs + comment_video_msgs:
+            if m:
+                c = getattr(m, "message", None) or getattr(m, "text", None) or ""
+                if c.strip():
+                    caption = c.strip()
+                    break
 
         title = ""
         for line in caption.split("\n"):
@@ -284,9 +344,9 @@ async def do_download(args):
             title = f"Telegram-{args.channel}-{args.msg_id}"
 
         downloaded_files = []
-        total_items = len(album_msgs)
+        total_items = len(targets)
 
-        for idx, m in enumerate(album_msgs):
+        for idx, m in enumerate(targets):
             is_photo = False
             if getattr(m, "photo", None):
                 is_photo = True
@@ -318,7 +378,10 @@ async def do_download(args):
             if args.max_size > 0 and file_size > args.max_size:
                 continue
 
-            target_path = os.path.join(out_dir, file_name)
+            clean_name = re.sub(r'[\\/*?:"<>|]', '_', file_name).strip()
+            if not clean_name:
+                clean_name = f"tg_{args.channel}_{m.id}.mp4"
+            target_path = os.path.join(out_dir, f"{m.id}_{clean_name}")
 
             last_report_time = 0.0
             last_report_bytes = 0
@@ -350,7 +413,7 @@ async def do_download(args):
                 downloaded_files.append({
                     "id": m.id,
                     "path": os.path.abspath(downloaded_path),
-                    "filename": os.path.basename(downloaded_path),
+                    "filename": clean_name,
                     "size": actual_size,
                     "mime": mime_type,
                     "is_photo": is_photo
@@ -365,15 +428,15 @@ async def do_download(args):
             }), flush=True)
             sys.exit(1)
 
-        # 优先选择当前 msg_id 对应的文件；若无则优先视频；最后取第一个文件
+        # 优先选择视频作为 primary；若无视频才选 msg_id 对应文件；最后选第一个
         primary = None
         for f in downloaded_files:
-            if f["id"] == msg_id:
+            if not f["is_photo"]:
                 primary = f
                 break
         if not primary:
             for f in downloaded_files:
-                if not f["is_photo"]:
+                if f["id"] == msg_id:
                     primary = f
                     break
         if not primary:
