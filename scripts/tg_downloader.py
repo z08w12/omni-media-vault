@@ -179,6 +179,32 @@ async def do_sign_in(args):
         sys.exit(1)
 
 
+def is_video_msg(m):
+    if not m or not getattr(m, "media", None):
+        return False
+    if getattr(m, "video", None):
+        return True
+    if getattr(m, "document", None):
+        mime = (getattr(getattr(m, "file", None), "mime_type", "") or "").lower()
+        name = (getattr(getattr(m, "file", None), "name", "") or "").lower()
+        if mime.startswith("video/") or name.endswith((".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts", ".flv")):
+            return True
+    return False
+
+
+def is_photo_msg(m):
+    if not m or not getattr(m, "media", None):
+        return False
+    if getattr(m, "photo", None):
+        return True
+    if getattr(m, "document", None):
+        mime = (getattr(getattr(m, "file", None), "mime_type", "") or "").lower()
+        name = (getattr(getattr(m, "file", None), "name", "") or "").lower()
+        if mime.startswith("image/") or name.endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".heic")):
+            return True
+    return False
+
+
 async def do_download(args):
     try:
         api_id = int(str(args.api_id).strip())
@@ -257,8 +283,9 @@ async def do_download(args):
 
         post_media_msgs.sort(key=lambda x: x.id)
 
-        # 2. 检查关联讨论组 / 评论区 (Discussion Group / Comments) 中的视频
+        # 2. 检查关联讨论组 / 评论区 (Discussion Group / Comments) 中的媒体（视频与图片）
         comment_video_msgs = []
+        comment_photo_msgs = []
         try:
             discussion = await client(functions.messages.GetDiscussionMessageRequest(
                 peer=entity,
@@ -267,48 +294,33 @@ async def do_download(args):
             if discussion and discussion.messages and discussion.chats:
                 top_msg = discussion.messages[0]
                 discussion_group = discussion.chats[0]
-                # 遍历评论区回复（通常视频在最新的若干条回复中，取前100条）
+                # 遍历评论区回复（通常资源在最新的若干条回复中，取前100条）
                 replies = await client.get_messages(discussion_group, reply_to=top_msg.id, limit=100)
                 for r in replies:
                     if not r or not getattr(r, "media", None):
                         continue
-                    is_vid = False
-                    if getattr(r, "video", None):
-                        is_vid = True
-                    elif getattr(r, "document", None):
-                        mime = getattr(getattr(r, "file", None), "mime_type", "") or ""
-                        name = (getattr(getattr(r, "file", None), "name", "") or "").lower()
-                        if mime.startswith("video/") or name.endswith(('.mp4', '.mkv', '.mov', '.webm', '.avi', '.ts', '.flv')):
-                            is_vid = True
-                    if is_vid:
+                    if is_video_msg(r):
                         comment_video_msgs.append(r)
+                    elif is_photo_msg(r):
+                        comment_photo_msgs.append(r)
         except Exception:
             comment_video_msgs = []
+            comment_photo_msgs = []
 
-        # 按消息编号正序排列（保证多集视频按自然发送顺序排列）
+        # 按消息编号正序排列（保证多集视频/多张图片按自然发送顺序排列）
         comment_video_msgs.sort(key=lambda x: x.id)
+        comment_photo_msgs.sort(key=lambda x: x.id)
 
         # 3. 确定最终下载的目标消息列表 targets
-        # - 如果评论区有视频：优先下载评论区视频；若主帖自身也有视频，一并下载；若主帖只有封面图，带上该图作为封面
-        # - 如果评论区无视频：直接下载主帖自身媒体
+        post_videos = [m for m in post_media_msgs if is_video_msg(m)]
+        post_photos = [m for m in post_media_msgs if is_photo_msg(m)]
+
         targets = []
-        if comment_video_msgs:
-            for pm in post_media_msgs:
-                is_pm_vid = False
-                if getattr(pm, "video", None):
-                    is_pm_vid = True
-                elif getattr(pm, "document", None):
-                    mime = getattr(getattr(pm, "file", None), "mime_type", "") or ""
-                    name = (getattr(getattr(pm, "file", None), "name", "") or "").lower()
-                    if mime.startswith("video/") or name.endswith(('.mp4', '.mkv', '.mov', '.webm', '.avi', '.ts', '.flv')):
-                        is_pm_vid = True
-                if is_pm_vid:
-                    targets.append(pm)
-            targets.extend(comment_video_msgs)
-            for pm in post_media_msgs:
-                if getattr(pm, "photo", None):
-                    targets.append(pm)
-                    break
+        if comment_video_msgs or comment_photo_msgs:
+            # 优先将所有视频排在前面，图片排在后面（保证存在视频时，首个文件必定为视频，作为主视频）
+            all_videos = post_videos + comment_video_msgs
+            all_photos = post_photos + comment_photo_msgs
+            targets = all_videos + all_photos
         else:
             targets = list(post_media_msgs)
 
@@ -316,13 +328,13 @@ async def do_download(args):
             await client.disconnect()
             print(json.dumps({
                 "type": "error",
-                "message": f"消息 [ID: {msg_id}] 及其留言评论区均不包含视频或媒体内容"
+                "message": f"消息 [ID: {msg_id}] 及其留言评论区均不包含视频或图片等媒体内容"
             }), flush=True)
             sys.exit(1)
 
         # 提取标题和标签（优先从主消息提取，主消息通常包含完整的标题介绍和 #标签）
         caption = ""
-        for m in [msg] + post_media_msgs + comment_video_msgs:
+        for m in [msg] + post_media_msgs + comment_video_msgs + comment_photo_msgs:
             if m:
                 c = getattr(m, "message", None) or getattr(m, "text", None) or ""
                 if c.strip():

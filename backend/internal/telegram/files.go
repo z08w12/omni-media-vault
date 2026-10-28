@@ -164,7 +164,7 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			var primaryItem MTProtoFileItem
 			if len(dlResult.Files) > 0 {
 				for _, f := range dlResult.Files {
-					if f.Path == dlResult.Path || (f.ID != 0 && f.ID == msgID) {
+					if f.Path == dlResult.Path {
 						primaryItem = f
 						break
 					}
@@ -223,6 +223,16 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 			}
 			if primaryItem.IsPhoto {
 				j.Tags = append([]string{"图片"}, j.Tags...)
+				primaryVideoID := telegramstorage.DriveID + "-" + j.ID
+				previewDir := filepath.Join(filepath.Dir(s.cfg.LocalFilesRoot), "previews")
+				thumbDst := mediaasset.ThumbnailPath(previewDir, primaryVideoID)
+				if err := os.MkdirAll(filepath.Dir(thumbDst), 0755); err == nil {
+					if linkErr := os.Link(destination, thumbDst); linkErr != nil {
+						if data, readErr := os.ReadFile(destination); readErr == nil {
+							_ = os.WriteFile(thumbDst, data, 0644)
+						}
+					}
+				}
 			}
 			if len(dlResult.Tags) > 0 {
 				seen := make(map[string]bool)
