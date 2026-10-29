@@ -508,6 +508,10 @@ func (m *Manager) processJob(ctx context.Context, job *catalog.RemoteUploadJob) 
 			PreviewStatus:   previewStatus,
 			DurationSeconds: durationSec,
 		}
+		if isImageExtension(ext) {
+			video.MediaKind = "image"
+			video.ThumbnailURL = "/p/thumb/" + video.ID
+		}
 	} else {
 		video, err = m.publishFile(ctx, job.ID, partName, title, ext, metadata.Size)
 		if err != nil {

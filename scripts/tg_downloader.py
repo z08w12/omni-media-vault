@@ -292,10 +292,33 @@ async def do_download(args):
                 msg_id=msg_id
             ))
             if discussion and discussion.messages and discussion.chats:
-                top_msg = discussion.messages[0]
                 discussion_group = discussion.chats[0]
-                # 遍历评论区回复（通常资源在最新的若干条回复中，取前100条）
-                replies = await client.get_messages(discussion_group, reply_to=top_msg.id, limit=100)
+                # 兼容单条消息与相册媒体组 (Album)：
+                # 当频道消息为媒体组时，discussion.messages 会包含该组所有转发消息（ID 倒序排列）。
+                # Telegram 仅在承载回复树的根节点（带有 replies 属性且 replies.replies > 0 的消息，通常是 ID 最小的首条消息）上挂载评论。
+                # 优先挑选明确带有回复计数的消息，其次按 ID 正序尝试，避免对非 Thread 根节点调用引发 MsgIdInvalidError。
+                candidates = []
+                for m in discussion.messages:
+                    if getattr(m, "replies", None) and getattr(m.replies, "replies", 0) > 0:
+                        candidates.append(m)
+                if not candidates:
+                    for m in discussion.messages:
+                        if getattr(m, "replies", None) is not None:
+                            candidates.append(m)
+                for m in sorted(discussion.messages, key=lambda x: x.id):
+                    if m not in candidates:
+                        candidates.append(m)
+
+                replies = []
+                for cand in candidates:
+                    try:
+                        res = await client.get_messages(discussion_group, reply_to=cand.id, limit=300)
+                        if res:
+                            replies = res
+                            break
+                    except Exception:
+                        continue
+
                 for r in replies:
                     if not r or not getattr(r, "media", None):
                         continue

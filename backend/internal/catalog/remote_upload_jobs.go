@@ -378,6 +378,40 @@ SELECT state, cancel_requested, source_kind
 		video.PublishedAt = now
 	}
 	video.UpdatedAt = now
+	mediaKind := video.MediaKind
+	if mediaKind == "" {
+		if isImageExt(video.Ext) {
+			mediaKind = "image"
+		} else {
+			mediaKind = "video"
+		}
+	}
+	mimeType := video.MIMEType
+	if mimeType == "" {
+		mimeType = guessMIMEType(video.Ext, mediaKind)
+	}
+	previewStatus := video.PreviewStatus
+	if previewStatus == "" {
+		if mediaKind == "image" {
+			previewStatus = "disabled"
+		} else {
+			previewStatus = "pending"
+		}
+	}
+	thumbnailURL := video.ThumbnailURL
+	thumbnailStatus := "pending"
+	if thumbnailURL != "" {
+		thumbnailStatus = "ready"
+	} else if mediaKind == "image" {
+		thumbnailStatus = "ready"
+		thumbnailURL = "/p/thumb/" + video.ID
+	}
+
+	video.MediaKind = mediaKind
+	video.MIMEType = mimeType
+	video.ThumbnailURL = thumbnailURL
+	video.PreviewStatus = previewStatus
+
 	manual := 0
 	if len(manualTags) > 0 {
 		manual = 1
@@ -386,9 +420,10 @@ SELECT state, cancel_requested, source_kind
 INSERT INTO videos (
   id, drive_id, file_id, file_name, fingerprint_status,
   title, author, tags, size_bytes, ext,
-  thumbnail_status, preview_status, tags_manual,
-  published_at, created_at, updated_at
-) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, 'pending', 'pending', ?, ?, ?, ?)`,
+  thumbnail_url, thumbnail_status, preview_status, tags_manual,
+  published_at, created_at, updated_at,
+  media_kind, mime_type
+) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		video.ID,
 		video.DriveID,
 		video.FileID,
@@ -398,10 +433,15 @@ INSERT INTO videos (
 		string(tagsJSON),
 		video.Size,
 		video.Ext,
+		thumbnailURL,
+		thumbnailStatus,
+		previewStatus,
 		manual,
 		video.PublishedAt.UnixMilli(),
 		video.CreatedAt.UnixMilli(),
 		video.UpdatedAt.UnixMilli(),
+		mediaKind,
+		mimeType,
 	)
 	if err != nil {
 		return err

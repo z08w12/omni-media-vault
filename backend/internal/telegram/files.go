@@ -323,20 +323,14 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 								thumbnailURL = "/p/thumb/" + extraVideoID
 							}
 						}
-						// 若主文件为视频且尚未生成封面，复制该贴图作为主视频的封面
-						if !primaryItem.IsPhoto {
-							primaryVideoID := telegramstorage.DriveID + "-" + j.ID
-							primaryThumbDst := mediaasset.ThumbnailPath(previewDir, primaryVideoID)
-							if _, statErr := os.Stat(primaryThumbDst); os.IsNotExist(statErr) {
-								if linkErr := os.Link(extraDest, primaryThumbDst); linkErr != nil {
-									if data, readErr := os.ReadFile(extraDest); readErr == nil {
-										_ = os.WriteFile(primaryThumbDst, data, 0644)
-									}
-								}
-							}
-						}
 					}
 					now := time.Now()
+					isImg := isImageExtension(extraExt) || extra.IsPhoto
+					mediaKind := "video"
+					if isImg {
+						mediaKind = "image"
+						previewStatus = "disabled"
+					}
 					extraVideo := &catalog.Video{
 						ID:              extraVideoID,
 						DriveID:         telegramstorage.DriveID,
@@ -348,6 +342,8 @@ func (s *Service) Fetch(ctx context.Context, j *catalog.RemoteUploadJob, progres
 						Ext:             strings.TrimPrefix(extraExt, "."),
 						PreviewStatus:   previewStatus,
 						ThumbnailURL:    thumbnailURL,
+						MediaKind:       mediaKind,
+						MIMEType:        extra.MIME,
 						DurationSeconds: 0,
 						PublishedAt:     now,
 						CreatedAt:       now,
