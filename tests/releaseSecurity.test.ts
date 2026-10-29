@@ -29,7 +29,7 @@ const releaseScript = readFileSync(
 
 test("frontend verification rejects every npm audit finding before release", () => {
   assert.deepEqual(packageJson.allowScripts, {
-    "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true,
     "fsevents@2.3.3": true,
   });
   assert.equal(packageJson.scripts?.audit, "npm audit --audit-level=info");
